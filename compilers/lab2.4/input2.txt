@@ -1,0 +1,32 @@
+int {Main} <- char[][] {args} =
+    char {c};
+    int {x} := - 1;
+    int[] {A} := (int 5), {B} := (int 10);
+
+    int {size} := ({Length} <- {A} , {B});
+
+    int {x}, {y} := 3;
+    {x} := 2 * {a} + 10;
+
+    {a} < 0 then
+        {sign} := - 1 . ;
+
+    {a} < 0 then
+        {sign} := - 1
+    else
+        {sign} := 0 . ;
+
+    char {letter};
+    $"A" ~ $"Z" loop {letter}
+        {Print} <- {letter} . ;
+
+    {i} := 0;
+
+    {i} < 10 loop
+        {i} := {i} + 1 . ;
+return 0 .
+
+
+char[] {Print} <- char[] {A} =
+    ({something} <- {A});
+    return {A} .

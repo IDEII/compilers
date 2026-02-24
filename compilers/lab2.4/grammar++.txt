@@ -1,0 +1,62 @@
+NProgram ::= NFunctions
+NFunctions ::= (NFunction)+
+NFunction ::= NFunctionHeader '=' NStatements '.'
+NFunctionHeader ::= NFunctionHeaderTypeName ('<-' NFuncParams)?
+NFunctionHeaderTypeName ::= (NType | KW_VOID) VARNAME
+NFuncParams ::= NFuncParam (',' NFuncParam)*
+NFuncParam ::= NType VARNAME
+
+NStatements ::= NStatement (';' NStatement)*
+
+NStatement ::= NType NDeclarationStatements
+             | NExpr
+               (
+                 ':=' NExpr
+               | KW_THEN NStatements (KW_ELSE NStatements)? '.'
+               | KW_LOOP NStatements '.'
+               | '~' NExpr KW_LOOP IDENTIFIER NStatements '.'
+               )?
+             | KW_LOOP NStatements KW_WHILE NExpr '.'
+             | KW_RETURN (NExpr)?
+
+
+NDeclarationStatements::= NDeclarationStatement (',' NDeclarationStatement)*
+NDeclarationStatement ::= VARNAME (':=' NArithmeticExpression)?
+
+NType ::= (KW_INT | KW_CHAR | KW_BOOL) ('[]')*
+
+NConst ::= INTEGER | CHAR | REF_CONST | STRING | KW_TRUE | KW_FALSE
+
+NExpr ::= NLogicalExpression ('|' NLogicalExpression | '@' NLogicalExpression)*
+NLogicalExpression ::= NCompareExpression ('&' NCompareExpression)*
+NCompareExpression ::= NCallExpression (NCompareOperator NCallExpression)*
+NCompareOperator '==' | '!=' | '<' | '>' | '<=' | '=>'
+NCallExpression ::= NArithmeticExpression ('<-' NArgs)?
+NArgs ::= NArithmeticExpression (',' NArithmeticExpression)*
+NArithmeticExpression ::= NTerm (NAdditiveOperator NTerm)*
+NAdditiveOperator ::= '+' | '-'
+NTerm ::= NFactor (NMultiplicativeOperator NFactor)*
+NMultiplicativeOperator ::= '*' | '/' | '%'
+NFactor ::= NPower (NPowerOperator NFactor)?
+NPowerOperator ::= '^'
+NPower ::= NArrayExpr | (Nneg NPower) | (NType NPrim)
+Nneg ::= '!' | '-'
+NArrayExpr ::= NPrimExpr | (NArrayExpr NPrimExpr) | NSTRING
+NPrim ::= VARNAME | NConst | '(' NExpr ')'
+
+
+
+IDENTIFIER = '\\{[A-Za-z0-9]*\\}'
+INTEGER = [A-Za-z0-9]+\\{[0-9]+\\}\\$|[0-9]+
+SYMBOLIC_CONSTANT = '\\$\\"[A-Za-z0-9]\\"'
+STRING = '\\".*\\"'
+KW_BOOL = bool
+KW_INT = int
+KW_RETURN = return
+KW_VOID = void
+KW_CHAR = char
+KW_LOOP = loop
+KW_THEN = then
+KW_ELSE = else
+KW_NULL = null
+KW_WHILE = while
