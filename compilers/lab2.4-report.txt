@@ -1,0 +1,1276 @@
+% Лабораторная работа № 2.4 «Рекурсивный спуск»
+% 22 июня 2024 г.
+% Павел Богданов, ИУ9-61Б
+
+# Цель работы
+Целью данной работы является изучение алгоритмов построения парсеров методом рекурсивного спуска.
+
+# Индивидуальный вариант
+Язык L2.
+
+# Реализация
+
+## Лексическая структура
+
+```
+IDENTIFIER = '\\{[A-Za-z0-9]*\\}'
+INTEGER = [A-Za-z0-9]+\\{[0-9]+\\}\\$|[0-9]+
+SYMBOLIC_CONSTANT = '\\$\\"[A-Za-z0-9]\\"'
+STRING = '\\".*\\"'
+KW_BOOL = bool
+KW_INT = int
+KW_RETURN = return
+KW_VOID = void
+KW_CHAR = char
+KW_LOOP = loop
+KW_THEN = then
+KW_ELSE = else
+KW_NULL = null
+KW_WHILE = while
+```
+
+## Грамматика языка
+
+Грамматика в РБНФ:
+
+```
+NProgram ::= NFunctions
+NFunctions ::= (NFunction)+
+NFunction ::= NFunctionHeader '=' NStatements '.'
+NFunctionHeader ::= NFunctionHeaderTypeName ('<-' NFuncParams)?
+NFunctionHeaderTypeName ::= (NType | KW_VOID) VARNAME
+NFuncParams ::= NFuncParam (',' NFuncParam)*
+NFuncParam ::= NType VARNAME
+
+NStatements ::= NStatement (';' NStatement)*
+
+NStatement ::= NType NDeclarationStatements
+             | NExpr
+               (
+                 ':=' NExpr
+               | KW_THEN NStatements (KW_ELSE NStatements)? '.'
+               | KW_LOOP NStatements '.'
+               | '~' NExpr KW_LOOP IDENTIFIER NStatements '.'
+               )?
+             | KW_LOOP NStatements KW_WHILE NExpr '.'
+             | KW_RETURN (NExpr)?
+
+
+NDeclarationStatements::= NDeclarationStatement (',' NDeclarationStatement)*
+NDeclarationStatement ::= VARNAME (':=' NArithmeticExpression)?
+
+NType ::= (KW_INT | KW_CHAR | KW_BOOL) ('[]')*
+
+NConst ::= INTEGER | CHAR | REF_CONST | STRING | KW_TRUE | KW_FALSE
+
+NExpr ::= NLogicalExpression ('|' NLogicalExpression | '@' NLogicalExpression)*
+NLogicalExpression ::= NCompareExpression ('&' NCompareExpression)*
+NCompareExpression ::= NCallExpression (NCompareOperator NCallExpression)*
+NCompareOperator '==' | '!=' | '<' | '>' | '<=' | '=>'
+NCallExpression ::= NArithmeticExpression ('<-' NArgs)?
+NArgs ::= NArithmeticExpression (',' NArithmeticExpression)*
+NArithmeticExpression ::= NTerm (NAdditiveOperator NTerm)*
+NAdditiveOperator ::= '+' | '-'
+NTerm ::= NFactor (NMultiplicativeOperator NFactor)*
+NMultiplicativeOperator ::= '*' | '/' | '%'
+NFactor ::= NPower (NPowerOperator NFactor)?
+NPowerOperator ::= '^'
+NPower ::= NArrayExpr | (Nneg NPower) | (NType NPrim)
+Nneg ::= '!' | '-'
+NArrayExpr ::= NPrimExpr | (NArrayExpr NPrimExpr) | NSTRING
+NPrim ::= VARNAME | NConst | '(' NExpr ')'
+```
+
+## Программная реализация
+
+##### Position, Fragment, Token, DomainTag
+
+```python
+class Position:  
+    def __init__(self, line, column, index):  
+        self.line = line  
+        self.column = column  
+        self.index = index  
+  
+    def get_simplified_string(self):  
+        return f"({self.line}, {self.column})"  
+  
+  
+class Fragment:  
+    def __init__(self, start_position, end_position):  
+        self.start_position = start_position  
+        self.end_position = end_position  
+  
+    def __str__(self):  
+        return f"{self.start_position}-{self.end_position}"  
+  
+  def get_simplified_string(self):  
+        return
+f"{self.start_position.get_simplified_string()}-{self.end_position.get_simplified_string()}"  
+  
+  
+class Token:  
+    def __init__(self, value, tag, fragment):  
+        self.value = value  
+        self.tag = tag  
+        self.fragment = fragment  
+  
+    def get_value(self):  
+        return self.value  
+  
+    def get_tag(self):  
+        return self.tag  
+  
+    def get_fragment_position(self):  
+        return self.fragment  
+  
+  
+class DomainTag:  
+    VARNAME = 1  
+  INTEGER = 2  
+  CHAR_CONST = 3  
+  STRING = 4  
+  OR_XOR_OP = 5  
+  AND_OP = 6  
+  PLUS = 7  
+  MINUS = 37  
+  COMPARE_OP = 8  
+  MUL_OP = 11  
+  POWER_OP = 12  
+  NOT_OP = 13  
+  EQUAL = 14  
+  ASSIGN = 15  
+  DOT = 16  
+  LEFT_ARROW = 17  
+  COMMA = 18  
+  TILDE = 19  
+  LBRBCC = 20  
+  LB = 21  
+  RB = 22  
+  SEMICOLON = 23  
+  KW_INT = 24  
+  KW_BOOL = 25  
+  KW_RETURN = 26  
+  KW_VOID = 27  
+  KW_CHAR = 28  
+  KW_LOOP = 29  
+  KW_THEN = 30  
+  KW_ELSE = 31  
+  KW_NULL = 32  
+  KW_WHILE = 33  
+  END = 34  
+  NONE = 35  
+  BOOLEAN = 36
+```
+
+##### Lexer
+
+```python
+import re  
+from others import *  
+  
+  
+class Lexer:  
+    def __init__(self, input):  
+        self.input = input  
+        self.pos = 0  
+  
+  def nextToken(self):  
+        VARNAME = r'(\{[A-Za-z0-9]*\})'  
+  CHAR = r'(\$\"[A-Za-z0-9]\")'  
+  STRING = r'\"[A-Za-z0-9 ]*\"'  
+  REF_CONST = r'null'  
+  INTEGER = r'([A-Za-z0-9]+\{[0-9]+\}\$)|([0-9]+)'  
+  BOOLEAN = r'true|false'  
+  OR_XOR = r'(\|)|(\@)'  
+  AND = r'(\&)'  
+  ASSIGN = r'(\:\=)'  
+  KW_LOOP = r'loop'  
+  KW_WHILE = r'while'  
+  tilda = r'(\~)'  
+  KW_ELSE = r'else'  
+  COMMENT = r'(\#\#.*\n)|(\#.*\#)'  
+  SPACES = r'[ \n\t]'  
+  LB = r'(\()'  
+  RB = r'(\))'  
+  LBRBCC = r'(\[\])'  
+  COMPARE_OPS = r'(\=\=)|(\!\=)|(\<\=)|(\>\=)|\>|(\<(?!\-))'  
+  POWER = r'(\^)'  
+  MULT_OPS = r'(\*)|(\/)|(\%)'  
+  LEFT_ARROW = r'\<\-'  
+  PLUS = r'\+'  
+  MINUS = r'(?<!\<)\-'  
+  NOT = r'(\!)'  
+  DOT = r'(\.)'  
+  KW_INT = r'int'  
+  KW_CHAR = r'char'  
+  KW_BOOL = r'bool'  
+  KW_RETURN = r'return'  
+  SEMICOLON = r'(\;)'  
+  KW_VOID = r'void'  
+  KW_THEN = r'then'  
+  COMMA = r'(\,)'  
+  EQUAL = r'(\=)'  
+  
+  if self.pos >= len(self.input):  
+            return Token("$", DomainTag.END, Fragment(self.findPosition(self.input, len(self.input)),  
+                                                      self.findPosition(self.input, len(self.input))))  
+  
+        matcher = re.compile(  
+            VARNAME + '|' +  
+            CHAR + '|' +  
+            STRING + '|' +  
+            REF_CONST + '|' +  
+            INTEGER + '|' +  
+            BOOLEAN + '|' +  
+            COMMA + '|' +  
+            OR_XOR + '|' +  
+            AND + '|' +  
+            ASSIGN + '|' +  
+            KW_LOOP + '|' +  
+            KW_WHILE + '|' +  
+            tilda + '|' +  
+            KW_ELSE + '|' +  
+            COMMENT + '|' +  
+            SPACES + '|' +  
+            LB + '|' +  
+            RB + '|' +  
+            LBRBCC + '|' +  
+            COMPARE_OPS + '|' +  
+            POWER + '|' +  
+            MULT_OPS + '|' +  
+            LEFT_ARROW + '|' +  
+            PLUS + '|' +  
+            MINUS + '|' +  
+            NOT + '|' +  
+            DOT + '|' +  
+            KW_INT + '|' +  
+            KW_CHAR + '|' +  
+            KW_BOOL + '|' +  
+            KW_RETURN + '|' +  
+            SEMICOLON + '|' +  
+            KW_VOID + '|' +  
+            EQUAL + '|' +  
+            KW_THEN  
+        ).match(self.input, self.pos)  
+  
+        if matcher:  
+            # print(self.pos)  
+ # print(matcher)  token = matcher.group()  
+            endPos = matcher.end()  
+            fragment = Fragment(self.findPosition(self.input, self.pos), self.findPosition(self.input,
+endPos - 1))  
+            self.pos = endPos  
+            return self.determineToken(token, fragment)  
+        raise Exception("LEX_ERROR: " + Fragment(self.findPosition(self.input, self.pos),  
+                                                 self.findPosition(self.input,
+self.pos)).get_simplified_string())  
+  
+    def determineToken(self, token, fragment):  
+        VARNAME = r'(\{[A-Za-z0-9]*\})'  
+  CHAR = r'(\$\"[A-Za-z0-9]\")'  
+  STRING = r'\"[A-Za-z0-9 ]*\"'  
+  REF_CONST = r'null'  
+  INTEGER = r'([A-Za-z0-9]+\{[0-9]+\}\$)|([0-9]+)'  
+  BOOLEAN = r'true|false'  
+  OR_XOR = r'(\|)|(\@)'  
+  AND = r'(\&)'  
+  ASSIGN = r'(\:\=)'  
+  KW_LOOP = r'loop'  
+  KW_WHILE = r'while'  
+  tilda = r'(\~)'  
+  KW_ELSE = r'else'  
+  COMMENT = r'(\#\#.*\n)|(\#.*\#)'  
+  SPACES = r'[ \n\t]'  
+  LB = r'(\()'  
+  RB = r'(\))'  
+  LBRBCC = r'(\[\])'  
+  COMPARE_OPS = r'(\=\=)|(\!\=)|(\<\=)|(\>\=)|(\<)|(\>)'  
+  POWER = r'(\^)'  
+  MULT_OPS = r'(\*)|(\/)|(\%)'  
+  LEFT_ARROW = r'\<\-'  
+  PLUS = r'\+'  
+  MINUS = r'\-'  
+  NOT = r'(\!)'  
+  DOT = r'(\.)'  
+  KW_INT = r'int'  
+  KW_CHAR = r'char'  
+  KW_BOOL = r'bool'  
+  KW_RETURN = r'return'  
+  SEMICOLON = r'(\;)'  
+  KW_VOID = r'void'  
+  KW_THEN = r'then'  
+  COMMA = r'(\,)'  
+  EQUAL = r'(\=)'  
+  
+  if re.match(VARNAME, token):  
+            return Token(token, DomainTag.VARNAME, fragment)  
+        elif re.match(LEFT_ARROW, token):  
+            return Token(token, DomainTag.LEFT_ARROW, fragment)  
+        elif re.match(EQUAL, token):  
+            return Token(token, DomainTag.EQUAL, fragment)  
+        elif re.match(INTEGER, token):  
+            return Token(token, DomainTag.INTEGER, fragment)  
+        elif re.match(CHAR, token):  
+            return Token(token, DomainTag.CHAR_CONST, fragment)  
+        elif re.match(STRING, token):  
+            return Token(token, DomainTag.STRING, fragment)  
+        elif re.match(BOOLEAN, token):  
+            return Token(token, DomainTag.BOOLEAN, fragment)  
+        elif re.match(OR_XOR, token):  
+            return Token(token, DomainTag.OR_XOR_OP, fragment)  
+        elif re.match(AND, token):  
+            return Token(token, DomainTag.AND_OP, fragment)  
+        elif re.match(COMPARE_OPS, token):  
+            return Token(token, DomainTag.COMPARE_OP, fragment)  
+        elif re.match(PLUS, token):  
+            return Token(token, DomainTag.PLUS, fragment)  
+        elif re.match(MINUS, token):  
+            return Token(token, DomainTag.MINUS, fragment)  
+        elif re.match(MULT_OPS, token):  
+            return Token(token, DomainTag.MUL_OP, fragment)  
+        elif re.match(POWER, token):  
+            return Token(token, DomainTag.POWER_OP, fragment)  
+        elif re.match(NOT, token):  
+            return Token(token, DomainTag.NOT_OP, fragment)  
+        elif re.match(ASSIGN, token):  
+            return Token(token, DomainTag.ASSIGN, fragment)  
+        elif re.match(DOT, token):  
+            return Token(token, DomainTag.DOT, fragment)  
+        elif re.match(COMMA, token):  
+            return Token(token, DomainTag.COMMA, fragment)  
+        elif re.match(tilda, token):  
+            return Token(token, DomainTag.TILDE, fragment)  
+        elif re.match(LBRBCC, token):  
+            return Token(token, DomainTag.LBRBCC, fragment)  
+        elif re.match(LB, token):  
+            return Token(token, DomainTag.LB, fragment)  
+        elif re.match(RB, token):  
+            return Token(token, DomainTag.RB, fragment)  
+        elif re.match(SEMICOLON, token):  
+            return Token(token, DomainTag.SEMICOLON, fragment)  
+        elif re.match(KW_INT, token):  
+            return Token(token, DomainTag.KW_INT, fragment)  
+        elif re.match(KW_BOOL, token):  
+            return Token(token, DomainTag.KW_BOOL, fragment)  
+        elif re.match(KW_RETURN, token):  
+            return Token(token, DomainTag.KW_RETURN, fragment)  
+        elif re.match(KW_VOID, token):  
+            return Token(token, DomainTag.KW_VOID, fragment)  
+        elif re.match(KW_CHAR, token):  
+            return Token(token, DomainTag.KW_CHAR, fragment)  
+        elif re.match(KW_LOOP, token):  
+            return Token(token, DomainTag.KW_LOOP, fragment)  
+        elif re.match(KW_THEN, token):  
+            return Token(token, DomainTag.KW_THEN, fragment)  
+        elif re.match(KW_ELSE, token):  
+            return Token(token, DomainTag.KW_ELSE, fragment)  
+        elif re.match(REF_CONST, token):  
+            return Token(token, DomainTag.KW_NULL, fragment)  
+        elif re.match(KW_WHILE, token):  
+            return Token(token, DomainTag.KW_WHILE, fragment)  
+        elif re.match(KW_LOOP, token):  
+            return Token(token, DomainTag.KW_LOOP, fragment)  
+        elif re.match(COMMENT, token):  
+            return self.nextToken()  
+        elif re.match(SPACES, token):  
+            return self.nextToken()  
+        raise Exception("LEX_ERROR:" + fragment.get_simplified_string())  
+  
+    def findPosition(self, text, index):  
+        line = 1  
+  col = 1  
+  for i in range(index):  
+            if text[i] == '\n':  
+                line += 1  
+  col = 1  
+  else:  
+                col += 1  
+  return Position(line, col, index)
+```
+
+##### Oak (Абстрактное синтасическое дерево),  Dataclasses
+
+```python
+from dataclasses import dataclass  
+from typing import List  
+  
+  
+class BasicType:  
+    Integer = 'int'  
+  Char = 'char'  
+  Boolean = 'bool'  
+  
+  
+@dataclass  
+class Type:  
+    base: BasicType or None  
+  arrayLevel: int  
+  
+  def toString(self, indent: int) -> str:  
+        return str(self)  
+  
+  
+@dataclass  
+class FuncionParam:  
+    type: Type  
+    name: str  
+  
+  def toString(self, indent: int) -> str:  
+        return str(self)  
+  
+  
+@dataclass  
+class FunctionHeaderTypeName:  
+    type: Type  
+    name: str  
+  
+  
+  
+class Expr:  
+    pass  
+  
+  
+@dataclass  
+class Var(Expr):  
+    name: str  
+  
+  def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("VariableExpr", indent)  
+        builder.append("name", self.name)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class ConstExpr(Expr):  
+    type: Type  
+    value: str  
+  
+  def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("ConstExpr", indent)  
+        builder.append("type", self.type).append("value", self.value)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class String(Expr):  
+    value: str  
+  
+  def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("StringConstExpr", indent)  
+        builder.append("value", str(self.value))  
+        return builder.toString()  
+  
+  
+@dataclass  
+class FunctionCallExpr(Expr):  
+    expr: Expr  
+    actualParameters: List[Expr]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("FunctionInvocationExpr", indent)  
+        builder.append("Expr", self.expr).append("actualParameters", self.actualParameters)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class BinOpExpr(Expr):  
+    left: Expr  
+    op: str  
+  right: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("BinOpExpr", indent)  
+        builder.append("left", self.left).append("op", self.op).append("right", self.right)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class AllocExpr(Expr):  
+    type: Type  
+    expr: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("AllocExpr", indent)  
+        builder.append("type", self.type).append("expr", self.expr)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class UnOpExpr(Expr):  
+    op: str  
+  expr: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("UnOpExpr", indent)  
+        builder.append("op", self.op).append("expr", self.expr)  
+        return builder.toString()  
+  
+  
+class Statement:  
+    pass  
+  
+  
+@dataclass  
+class DeclarationAssignment:  
+    name: str  
+  expr: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        return str(self)  
+  
+@dataclass  
+class DeclarationStatement(Statement):  
+    type: Type  
+    declarationAssignments: list[DeclarationAssignment]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("DeclarationStatement", indent)  
+        builder.append("type", self.type).append("declarationAssignments", self.declarationAssignments) 
+
+        return builder.toString()  
+  
+  
+@dataclass  
+class AssignmentStatement(Statement):  
+    left: Expr  
+    right: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("AssignmentStatement", indent)  
+        builder.append("left", self.left).append("right", self.right)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class CallExpression(Statement):  
+    name: str  
+  actualParameters: list[Expr]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("InvocationStatement", indent)  
+        builder.append("name", self.name).append("actualParameters", self.actualParameters)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class IfStatement(Statement):  
+    condition: Expr  
+    thenBranch: list[Statement]  
+    elseBranch: list[Statement]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("IfStatement", indent)  
+        builder.append("condition", self.condition).append("thenBranch",
+self.thenBranch).append("elseBranch",  
+                                                                                                
+self.elseBranch)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class WhileStatement(Statement):  
+    condition: Expr  
+    body: list[Statement]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("PreWhileStatement", indent)  
+        builder.append("condition", self.condition).append("body", self.body)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class PostWhileStatement(Statement):  
+    condition: Expr  
+    body: list[Statement]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("PostWhileStatement", indent)  
+        builder.append("condition", self.condition).append("body", self.body)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class ForStatement(Statement):  
+    start: Expr  
+    end: Expr  
+    variable: str  
+  body: list[Statement]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("ForStatement", indent)  
+        builder.append("start", self.start).append("end", self.end).append("variable",
+self.variable).append("body",  
+                                                                                                         
+   self.body)  
+        return builder.toString()  
+  
+  
+@dataclass  
+class ReturnStatement(Statement):  
+    expr: Expr  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("ReturnStatement", indent)  
+        builder.append("expr", self.expr)  
+        return builder.toString()  
+  
+  
+  
+  
+@dataclass  
+class FunctionHeader:  
+    type: Type  
+    name: str  
+  FuncParams: list[FuncionParam]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("FunctionHeader", indent)  
+        builder.append("type", self.type).append("name", self.name).append("formalParameters",
+self.FuncParams)  
+        return builder.toString()  
+  
+@dataclass  
+class FunctionDeclaration:  
+    header: FunctionHeader  
+    body: list[Statement]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("FunctionDeclaration", indent)  
+        builder.append("header", self.header).append("body", self.body)  
+        return builder.toString()  
+  
+@dataclass  
+class Program:  
+    functionDeclarations: list[FunctionDeclaration]  
+  
+    def toString(self, indent: int) -> str:  
+        builder = PrettyBuilder("Program", 0)  
+        builder.append("functionDeclarations", self.functionDeclarations)  
+        return builder.toString()  
+  
+  
+  
+class AbstractTree:  
+    def __init__(self, program: Program):  
+        self.program = program  
+  
+    def getProgram(self) -> Program:  
+        return self.program  
+  
+    def __str__(self) -> str:  
+        return str(self.program)  
+  
+    def print(self) -> None:  
+        print(self.program.toString(0))  
+  
+  
+  
+class PrettyBuilder:  
+    def __init__(self, name, indent):  
+        self.string_builder = []  
+        self.string_builder.append(f"{name}(")  
+        self.indent = indent + len(self.string_builder[0])  
+        self.count = 0  
+  
+  def append(self, name, value):  
+        builder = []  
+        if self.count > 0:  
+            builder.append(",\n" + " " * max(0, self.indent))  
+        builder.append(f"{name}=")  
+        if isinstance(value, list):  
+            builder.append("[")  
+            size = self.indent + len(name) + 2  
+  if len(value) > 0:  
+                if value[0]:  
+                    builder.append(value[0].toString(size))  
+                    for item in value[1:]:  
+                        if item is not None:  
+                            builder.append(",\n" + " " * max(0, size) + item.toString(size))  
+                        else:  
+                            builder.append(",\n" + " " * max(0, size) + "null")  
+            builder.append("]")  
+        elif hasattr(value, 'toString'):  
+            size = self.indent + len(name) + 1  
+  builder.append(value.toString(size))  
+        else:  
+            builder.append(value)  
+  
+        self.string_builder.append("".join(builder))  
+        self.count += 1  
+  return self  
+  
+  def toString(self):  
+        return "".join(self.string_builder) + ")"
+```
+
+##### Main
+
+```python
+from collections import defaultdict  
+  
+from Lexer import *  
+from abstractTree import *  
+  
+  
+class Parser:  
+    def __init__(self, lexer):  
+        self.lexer = lexer  
+        self.initialize_min_first_set()  
+        self.sym = lexer.nextToken()  
+        self.tree = self.NProgram()  
+  
+    def print_tree(self):  
+        self.tree.print()  
+  
+    def initialize_min_first_set(self):  
+        self.first = defaultdict(set)  
+        self.first["NFunctionDeclaration"].update(  
+            {DomainTag.KW_INT, DomainTag.KW_CHAR, DomainTag.KW_BOOL, DomainTag.KW_VOID})  
+        self.first["NType"].update({DomainTag.KW_INT, DomainTag.KW_CHAR, DomainTag.KW_BOOL})  
+        self.first["NPrim"].update(  
+            {DomainTag.VARNAME, DomainTag.LB, DomainTag.INTEGER, DomainTag.CHAR_CONST, DomainTag.BOOLEAN,
+ 
+             DomainTag.KW_NULL})  
+        self.first["NCmpOp"].update({DomainTag.COMPARE_OP})  
+        self.first["NExpr"].update(  
+            {DomainTag.VARNAME, DomainTag.LB, DomainTag.INTEGER, DomainTag.CHAR_CONST, DomainTag.BOOLEAN,
+ 
+             DomainTag.KW_NULL, DomainTag.STRING, DomainTag.MINUS, DomainTag.NOT_OP, DomainTag.KW_INT,  
+             DomainTag.KW_CHAR, DomainTag.KW_BOOL})  
+  
+    def report_error(self):  
+        raise RuntimeError(str(self.sym.get_fragment_position().get_simplified_string()))  
+  
+    # NProgram ::= NFunctions  
+  def NProgram(self):  
+        function_declarations = self.NFuncions()  
+        return AbstractTree(Program(function_declarations))  
+  
+    # NFunctions ::= (NFunction)+  
+  def NFuncions(self):  
+        function_declarations = []  
+        while self.first["NFunctionDeclaration"].__contains__(self.sym.get_tag()):  
+            function_declarations.append(self.NFuncion())  
+        return function_declarations  
+  
+  
+    # NStatement ::= NType NDeclarationStatements  
+ #              | NExpr #                ( #                  ':=' NExpr #                | KW_THEN
+NStatements (KW_ELSE NStatements)? '.' #                | KW_LOOP NStatements '.' #                | '~'
+NExpr KW_LOOP IDENTIFIER NStatements '.' #                )? #              | KW_LOOP NStatements
+KW_WHILE NExpr '.' #              | KW_RETURN (NExpr)?  def NStatement(self):  
+        statement = None  
+  
+ if self.sym.get_tag() in self.first["NType"]:  
+            type = self.NType()  
+            declaration_assignments = self.NDeclarationAssignments()  
+            statement = DeclarationStatement(type, declaration_assignments)  
+        elif self.sym.get_tag() == DomainTag.KW_LOOP:  
+            self.sym = lexer.nextToken()  
+            body = self.NStatements()  
+            if self.sym.get_tag() == DomainTag.DOT:  
+                self.sym = lexer.nextToken()  
+            else:  
+                self.report_error()  
+            condition = self.NExpr()  
+            if self.sym.get_tag() == DomainTag.DOT:  
+                self.sym = lexer.nextToken()  
+            else:  
+                self.report_error()  
+            statement = PostWhileStatement(condition, body)  
+        elif self.sym.get_tag() == DomainTag.KW_RETURN:  
+            self.sym = lexer.nextToken()  
+            expr = None  
+ if self.sym.get_tag() in self.first["NExpr"]:  
+                expr = self.NExpr()  
+            statement = ReturnStatement(expr)  
+        else:  
+            expr = self.NExpr()  
+            if self.sym.get_tag() == DomainTag.ASSIGN:  
+                self.sym = lexer.nextToken()  
+                expr2 = self.NExpr()  
+                statement = AssignmentStatement(expr, expr2)  
+            elif self.sym.get_tag() == DomainTag.KW_THEN:  
+                self.sym = lexer.nextToken()  
+                then_branch = self.NStatements()  
+                else_branch = []  
+                if self.sym.get_tag() == DomainTag.KW_ELSE:  
+                    self.sym = lexer.nextToken()  
+                    else_branch = self.NStatements()  
+                if self.sym.get_tag() == DomainTag.DOT:  
+                    self.sym = lexer.nextToken()  
+                else:  
+                    self.report_error()  
+                statement = IfStatement(expr, then_branch, else_branch)  
+            elif self.sym.get_tag() == DomainTag.KW_LOOP:  
+                self.sym = lexer.nextToken()  
+                body = self.NStatements()  
+                if self.sym.get_tag() == DomainTag.DOT:  
+                    self.sym = lexer.nextToken()  
+                else:  
+                    self.report_error()  
+                statement = WhileStatement(expr, body)  
+            elif self.sym.get_tag() == DomainTag.TILDE:  
+                self.sym = lexer.nextToken()  
+                expr2 = self.NExpr()  
+                if self.sym.get_tag() == DomainTag.KW_LOOP:  
+                    self.sym = lexer.nextToken()  
+                else:  
+                    self.report_error()  
+                variable = None  
+ if self.sym.get_tag() == DomainTag.VARNAME:  
+                    variable = self.sym.get_value()  
+                    self.sym = lexer.nextToken()  
+                else:  
+                    self.report_error()  
+                body = self.NStatements()  
+                if self.sym.get_tag() == DomainTag.DOT:  
+                    self.sym = lexer.nextToken()  
+                else:  
+                    self.report_error()  
+                statement = ForStatement(expr, expr2, variable, body)  
+  
+        return statement  
+  
+    # NFunction ::= NFunctionHeader '=' NStatements '.'  
+  
+  def NFuncion(self):  
+        header = self.NFunctionHeader()  
+        if self.sym.get_tag() == DomainTag.EQUAL:  
+            self.sym = self.lexer.nextToken()  
+        else:  
+            self.report_error()  
+        statements = self.NStatements()  
+        if self.sym.get_tag() == DomainTag.DOT:  
+            self.sym = self.lexer.nextToken()  
+        else:  
+            self.report_error()  
+        return FunctionDeclaration(header, statements)  
+  
+    # NFunctionHeader ::= NFunctionHeaderTypeName ('<-' NFuncParams)?  
+  def NFunctionHeader(self):  
+        type_and_name = self.NFunctionHeaderTypeName()  
+        formal_parameters = []  
+        if self.sym.get_tag() == DomainTag.LEFT_ARROW:  
+            self.sym = self.lexer.nextToken()  
+            formal_parameters = self.NFunctionParams()  
+        return FunctionHeader(type_and_name.type, type_and_name.name, formal_parameters)  
+  
+    # NStatements ::= NStatement (';' NStatement)*  
+  def NStatements(self):  
+        statements = [self.NStatement()]  
+        while self.sym.get_tag() == DomainTag.SEMICOLON:  
+            self.sym = self.lexer.nextToken()  
+            statements.append(self.NStatement())  
+        return statements  
+  
+    # NFunctionHeaderTypeName ::= (NType | KW_VOID) VARNAME  
+  def NFunctionHeaderTypeName(self):  
+        type_ = None  
+  name = None  
+ if self.first["NType"].__contains__(self.sym.get_tag()):  
+            type_ = self.NType()  
+        else:  
+            if self.sym.get_tag() == DomainTag.KW_VOID:  
+                self.sym = self.lexer.nextToken()  
+            else:  
+                self.report_error()  
+        if self.sym.get_tag() == DomainTag.VARNAME:  
+            name = self.sym.get_value()  
+            self.sym = self.lexer.nextToken()  
+        else:  
+            self.report_error()  
+        return FunctionHeaderTypeName(type_, name)  
+  
+    # NFuncParams ::= NFuncParam (',' NFuncParam)*  
+  def NFunctionParams(self):  
+        formal_parameters = [self.NFuncionParam()]  
+        while self.sym.get_tag() == DomainTag.COMMA:  
+            self.sym = self.lexer.nextToken()  
+            formal_parameters.append(self.NFuncionParam())  
+        return formal_parameters  
+  
+    # NFuncParam ::= NType VARNAME  
+  def NFuncionParam(self):  
+        type_ = self.NType()  
+        name = None  
+ if self.sym.get_tag() == DomainTag.VARNAME:  
+            name = self.sym.get_value()  
+            self.sym = self.lexer.nextToken()  
+        else:  
+            self.report_error()  
+        return FuncionParam(type_, name)  
+  
+    # NType ::= (KW_INT | KW_CHAR | KW_BOOL) ('[]')*  
+  def NType(self):  
+        prim = None  
+ if self.sym.get_tag() == DomainTag.KW_INT:  
+            prim = BasicType.Integer  
+            self.sym = lexer.nextToken()  
+        elif self.sym.get_tag() == DomainTag.KW_CHAR:  
+            prim = BasicType.Char  
+            self.sym = lexer.nextToken()  
+        elif self.sym.get_tag() == DomainTag.KW_BOOL:  
+            prim = BasicType.Boolean  
+            self.sym = lexer.nextToken()  
+        else:  
+            self.report_error()  
+  
+        n = 0  
+  while self.sym.get_tag() == DomainTag.LBRBCC:  
+            n += 1  
+  self.sym = lexer.nextToken()  
+  
+        return Type(prim, n)  
+  
+    # NDeclarationStatement ::= VARNAME (':=' NArithmeticExpression)?  
+  def NDeclarationAssignment(self):  
+        name = None  
+  expr = None  
+ if self.sym.get_tag() == DomainTag.VARNAME:  
+            name = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+        else:  
+            self.report_error()  
+  
+        if self.sym.get_tag() == DomainTag.ASSIGN:  
+            self.sym = lexer.nextToken()  
+            expr = self.NArithmeticExpression()  
+  
+        return DeclarationAssignment(name, expr)  
+  
+    # NDeclarationStatements::= NDeclarationStatement (',' NDeclarationStatement)*  
+  def NDeclarationAssignments(self):  
+        declaration_assignments = [self.NDeclarationAssignment()]  
+        while self.sym.get_tag() == DomainTag.COMMA:  
+            self.sym = lexer.nextToken()  
+            declaration_assignments.append(self.NDeclarationAssignment())  
+        return declaration_assignments  
+  
+  
+    # NExpr ::= NLogicalExpression ('|' NLogicalExpression | '@' NLogicalExpression)*  
+  def NExpr(self):  
+        expr = self.NLogicalExpression()  
+        bin_op_expr = None  
+ while self.sym.get_tag() == DomainTag.OR_XOR_OP:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr2 = self.NLogicalExpression()  
+            if bin_op_expr is not None:  
+                bin_op_expr = BinOpExpr(bin_op_expr, op, expr2)  
+            else:  
+                bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+    # NLogicalExpression ::= NCompareExpression ('&' NCompareExpression)*  
+  def NLogicalExpression(self):  
+        expr = self.NCompareExpression()  
+        bin_op_expr = None  
+ while self.sym.get_tag() == DomainTag.AND_OP:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr2 = self.NCompareExpression()  
+            if bin_op_expr is not None:  
+                bin_op_expr = BinOpExpr(bin_op_expr, op, expr2)  
+            else:  
+                bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+    # NCompareExpression ::= NCallExpression (NCompareOperator NCallExpression)*  
+  
+  def NCompareExpression(self):  
+        expr = self.NCallExpression()  
+        bin_op_expr = None  
+ while self.sym.get_tag() in self.first["NCmpOp"]:  
+            op = self.NCompareOperator()  
+            expr2 = self.NCallExpression()  
+            if bin_op_expr is not None:  
+                bin_op_expr = BinOpExpr(bin_op_expr, op, expr2)  
+            else:  
+                bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+    # NCompareOperator '==' | '!=' | '<' | '>' | '<=' | '=>'  
+  def NCompareOperator(self):  
+        op = ""  
+  if self.sym.get_tag() == DomainTag.COMPARE_OP:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+        else:  
+            self.report_error()  
+        return op  
+  
+    # NCallExpression ::= NArithmeticExpression ('<-' NArgs)?  
+  def NCallExpression(self):  
+        expr = self.NArithmeticExpression()  
+        args = []  
+        if self.sym.get_tag() == DomainTag.LEFT_ARROW:  
+            self.sym = lexer.nextToken()  
+            args = self.NArgs()  
+        if not args:  
+            return expr  
+        return CallExpression(expr, args)  
+  
+    # NArgs ::= NArithmeticExpression (',' NArithmeticExpression)*  
+  def NArgs(self):  
+        args = [self.NArithmeticExpression()]  
+        while self.sym.get_tag() == DomainTag.COMMA:  
+            self.sym = lexer.nextToken()  
+            args.append(self.NArithmeticExpression())  
+        return args  
+  
+    # NArithmeticExpression ::= NTerm (NAdditiveOperator NTerm)*  
+  def NArithmeticExpression(self):  
+        expr = self.NTerm()  
+        bin_op_expr = None  
+  # NAdditiveOperator ::= '+' | '-'  
+  while self.sym.get_tag() == DomainTag.PLUS or self.sym.get_tag() == DomainTag.MINUS:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr2 = self.NTerm()  
+            if bin_op_expr is not None:  
+                bin_op_expr = BinOpExpr(bin_op_expr, op, expr2)  
+            else:  
+                bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+    # NTerm ::= NFactor (NMultiplicativeOperator NFactor)*  
+  def NTerm(self):  
+        expr = self.NFactor()  
+        bin_op_expr = None  
+  # NMultiplicativeOperator ::= '*' | '/' | '%'  
+  while self.sym.get_tag() == DomainTag.MUL_OP:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr2 = self.NFactor()  
+            if bin_op_expr is not None:  
+                bin_op_expr = BinOpExpr(bin_op_expr, op, expr2)  
+            else:  
+                bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+    # NFactor ::= NPower (NPowerOperator NFactor)?  
+  def NFactor(self):  
+        expr = self.NPower()  
+        bin_op_expr = None  
+  # NPowerOperator ::= '^'  
+  if self.sym.get_tag() == DomainTag.POWER_OP:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr2 = self.NFactor()  
+            bin_op_expr = BinOpExpr(expr, op, expr2)  
+        if bin_op_expr is None:  
+            return expr  
+        return bin_op_expr  
+  
+  
+    # NPower ::= NArrayExpr | (Nneg NPower) | (NType NPrim)  
+  def NPower(self):  
+        expr = None  
+  # Nneg ::= '!' | '-'  
+  
+  if self.sym.get_tag() == DomainTag.NOT_OP or self.sym.get_tag() == DomainTag.MINUS:  
+            op = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr = UnOpExpr(op, self.NPower())  
+        elif self.sym.get_tag() in self.first["NType"]:  
+            type_ = self.NType()  
+            expr2 = self.NPrim()  
+            expr = AllocExpr(type_, expr2)  
+        else:  
+            expr = self.NArrayExpr()  
+        return expr  
+  
+    # NArrayExpr ::= NPrimExpr | (NArrayExpr NPrimExpr) | NSTRING  
+  def NArrayExpr(self):  
+        expr = None  
+ if self.sym.get_tag() == DomainTag.STRING:  
+            expr = self.NStringConstant()  
+        elif self.sym.get_tag() in self.first["NPrim"]:  
+            expr = self.NPrim()  
+        else:  
+            expr1 = self.NArrayExpr()  
+            expr2 = self.NPrim()  
+            expr = BinOpExpr(expr1, "at", expr2)  
+        return expr  
+  
+    # NPrim ::= VARNAME | NConst | '(' NExpr ')'  
+  def NPrim(self):  
+        expr = None  
+ if self.sym.get_tag() == DomainTag.VARNAME:  
+            name = self.sym.get_value()  
+            self.sym = lexer.nextToken()  
+            expr = Var(name)  
+        elif self.sym.get_tag() == DomainTag.LB:  
+            self.sym = lexer.nextToken()  
+            expr = self.NExpr()  
+            if self.sym.get_tag() == DomainTag.RB:  
+                self.sym = lexer.nextToken()  
+            else:  
+                self.report_error()  
+        else:  
+            expr = self.NConst()  
+        return expr  
+  
+    def NStringConstant(self):  
+        return String(self.sym.get_value)  
+  
+    # NConst ::= INTEGER | CHAR | REF_CONST | STRING | KW_TRUE | KW_FALSE  
+  def NConst(self):  
+        expr = None  
+ if self.sym.get_tag() in [DomainTag.INTEGER, DomainTag.BOOLEAN, DomainTag.CHAR_CONST,
+DomainTag.KW_NULL]:  
+            value = self.sym.get_value()  
+            if self.sym.get_tag() == DomainTag.INTEGER:  
+                expr = ConstExpr(Type(BasicType.Integer, 0), value)  
+            elif self.sym.get_tag() == DomainTag.CHAR_CONST:  
+                expr = ConstExpr(Type(BasicType.Char, 0), value)  
+            elif self.sym.get_tag() == DomainTag.BOOLEAN:  
+                expr = ConstExpr(Type(BasicType.Boolean, 0), value)  
+            elif self.sym.get_tag() == DomainTag.KW_NULL:  
+                expr = ConstExpr(Type(None, 0), value)  
+            self.sym = lexer.nextToken()  
+        else:  
+            self.report_error()  
+        return expr  
+  
+  
+if __name__ == "__main__":  
+    input_file = "input2.txt"  
+  with open(input_file, "r") as file:  
+        input_text = file.read()  
+    lexer = Lexer(input_text)    
+    parser.print_tree()
+```
+
+# Тестирование
+
+Входные данные
+
+```
+int {Main} <- char[][] {args} =  
+    char {c};  
+    int {x} := - 1;  
+    int[] {A} := (int 5), {B} := (int 10);  
+  
+    int {size} := ({Length} <- {A} , {B});  
+  
+    int {x}, {y} := 3;  
+    {x} := 2 * {a} + 10;  
+  
+    {a} < 0 then  
+        {sign} := - 1 . ;  
+  
+    {a} < 0 then  
+        {sign} := - 1  
+    else  
+        {sign} := 0 . ;  
+  
+    char {letter};  
+    $"A" ~ $"Z" loop {letter}  
+        {Print} <- {letter} . ;  
+  
+    {i} := 0;  
+  
+    {i} < 10 loop  
+        {i} := {i} + 1 . ;  
+return 0 .  
+  
+  
+char[] {Print} <- char[] {A} =  
+    ({something} <- {A});  
+    return {A} .
+```
+
+Вывод на `stdout`
+
+<!-- ENABLE LONG LINES -->
+
+```
+Program(functionDeclarations=[FunctionDeclaration(header=FunctionHeader(type=Type(base='int', arrayLevel=0),
+                                                                        name={Main},
+                                                                        formalParameters=[FuncionParam(type=Type(base='char', arrayLevel=2), name='{args}')]),
+                                                  body=[DeclarationStatement(type=Type(base='char', arrayLevel=0),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{c}', expr=None)]),
+                                                        DeclarationStatement(type=Type(base='int', arrayLevel=0),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{x}', expr=UnOpExpr(op='-', expr=ConstExpr(type=Type(base='int', arrayLevel=0), value='1')))]),
+                                                        DeclarationStatement(type=Type(base='int', arrayLevel=1),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{A}', expr=AllocExpr(type=Type(base='int', arrayLevel=0), expr=ConstExpr(type=Type(base='int', arrayLevel=0), value='5'))),
+                                                                                                     DeclarationAssignment(name='{B}', expr=AllocExpr(type=Type(base='int', arrayLevel=0), expr=ConstExpr(type=Type(base='int', arrayLevel=0), value='10')))]),
+                                                        DeclarationStatement(type=Type(base='int', arrayLevel=0),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{size}', expr=CallExpression(name=Var(name='{Length}'), actualParameters=[Var(name='{A}'), Var(name='{B}')]))]),
+                                                        DeclarationStatement(type=Type(base='int', arrayLevel=0),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{x}', expr=None),
+                                                                                                     DeclarationAssignment(name='{y}', expr=ConstExpr(type=Type(base='int', arrayLevel=0), value='3'))]),
+                                                        AssignmentStatement(left=VariableExpr(name={x}),
+                                                                            right=BinOpExpr(left=BinOpExpr(left=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                                          value=2),
+                                                                                                           op=*,
+                                                                                                           right=VariableExpr(name={a})),
+                                                                                            op=+,
+                                                                                            right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                            value=10))),
+                                                        IfStatement(condition=BinOpExpr(left=VariableExpr(name={a}),
+                                                                                        op=<,
+                                                                                        right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                        value=0)),
+                                                                    thenBranch=[AssignmentStatement(left=VariableExpr(name={sign}),
+                                                                                                    right=UnOpExpr(op=-,
+                                                                                                                   expr=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                                                  value=1)))],
+                                                                    elseBranch=[]),
+                                                        IfStatement(condition=BinOpExpr(left=VariableExpr(name={a}),
+                                                                                        op=<,
+                                                                                        right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                        value=0)),
+                                                                    thenBranch=[AssignmentStatement(left=VariableExpr(name={sign}),
+                                                                                                    right=UnOpExpr(op=-,
+                                                                                                                   expr=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                                                  value=1)))],
+                                                                    elseBranch=[AssignmentStatement(left=VariableExpr(name={sign}),
+                                                                                                    right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                                    value=0))]),
+                                                        DeclarationStatement(type=Type(base='char', arrayLevel=0),
+                                                                             declarationAssignments=[DeclarationAssignment(name='{letter}', expr=None)]),
+                                                        ForStatement(start=ConstExpr(type=Type(base='char', arrayLevel=0),
+                                                                                     value=$"A"),
+                                                                     end=ConstExpr(type=Type(base='char', arrayLevel=0),
+                                                                                   value=$"Z"),
+                                                                     variable={letter},
+                                                                     body=[]),
+                                                        AssignmentStatement(left=VariableExpr(name={i}),
+                                                                            right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                            value=0)),
+                                                        PreWhileStatement(condition=BinOpExpr(left=VariableExpr(name={i}),
+                                                                                              op=<,
+                                                                                              right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                              value=10)),
+                                                                          body=[AssignmentStatement(left=VariableExpr(name={i}),
+                                                                                                    right=BinOpExpr(left=VariableExpr(name={i}),
+                                                                                                                    op=+,
+                                                                                                                    right=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                                                                    value=1)))]),
+                                                        ReturnStatement(expr=ConstExpr(type=Type(base='int', arrayLevel=0),
+                                                                                       value=0))]),
+                              FunctionDeclaration(header=FunctionHeader(type=Type(base='char', arrayLevel=1),
+                                                                        name={Print},
+                                                                        formalParameters=[FuncionParam(type=Type(base='char', arrayLevel=1), name='{A}')]),
+                                                  body=[])])
+```
+
+# Вывод
+В ходе выполнения лабораторной работы я изучил алгоритмы построения парсеров методом рекурсивного спуска.
+Работа оказалась сложная, потому что язык имеет сложный синтаксис, а так же из-за того, для языка сложно
+реализовать LALR(1) даже с некоторыми условностями, соответственно трудно перевести эту грамматику в вид
+LL(1), необходимую для парсеров построенных по методу рекурсивного спуска.

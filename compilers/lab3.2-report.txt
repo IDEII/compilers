@@ -1,0 +1,742 @@
+% "Лабораторная работа 3.2 «Форматтер исходных текстов»"
+% 6 июня 2024 г.
+% Павел Богданов, ИУ9-61Б
+
+# Цель работы
+Целью данной работы является приобретение навыков использования генератора синтаксических анализаторов
+bison.
+
+# Индивидуальный вариант
+язык L2.
+
+# Реализация
+
+### lexer.flex
+
+```c++
+%{
+#include <string>
+#include <iostream>
+#include <memory>
+
+#include "scanner.hpp"
+#include "driver.hpp"
+
+#undef  YY_DECL
+#define YY_DECL \
+ int Scanner::lex(ps::Parser::value_type* lval)
+
+using DOMAIN_TAG = ps::Parser::token;
+
+#define yyterminate() return (DOMAIN_TAG::END)
+
+Driver driver;
+
+
+#define YY_USER_ACTION \
+{ \
+   driver.common(lval, yytext); \
+}
+
+%}
+
+%option debug
+%option nodefault
+%option yyclass="Scanner"
+%option noyywrap
+%option c++
+
+NUMBER (([A-Za-z0-9]+\{[0-9]+\}$)|[0-9]+)
+
+REF_CONST (null)
+VARNAME (\{[A-Za-z0-9]+\})
+
+CHAR_CONST ($\"[A-Za-z0-9]?\")
+STRING_CONST (\"[A-Za-z0-9 ]*\")
+
+%%
+
+{NUMBER} {
+   return DOMAIN_TAG::TAG_NUMBER;
+}
+
+then {
+   return DOMAIN_TAG::TAG_THEN;
+}
+
+loop {
+   return DOMAIN_TAG::TAG_LOOP;
+}
+
+while {
+   return DOMAIN_TAG::TAG_WHILE;
+}
+
+void {
+   return DOMAIN_TAG::TAG_VOID;
+}
+
+(return) {
+   return DOMAIN_TAG::TAG_RETURN;
+}
+
+
+null {
+   return DOMAIN_TAG::TAG_REF_CONST;
+}
+
+else {
+   return DOMAIN_TAG::TAG_ELSE;
+}
+
+true {
+   return DOMAIN_TAG::TAG_TRUE;
+}
+false {
+   return DOMAIN_TAG::TAG_FALSE;
+}
+
+\| {
+   return DOMAIN_TAG::TAG_OR;
+}
+
+\& {
+   return DOMAIN_TAG::TAG_AND;
+}
+
+\! {
+   return DOMAIN_TAG::TAG_NOT;
+}
+
+int {
+   return DOMAIN_TAG::TAG_INT;
+}
+
+char {
+   return DOMAIN_TAG::TAG_CHAR;
+}
+
+bool {
+   return DOMAIN_TAG::TAG_BOOL;
+}
+
+{VARNAME} {
+   return DOMAIN_TAG::TAG_VARNAME;
+}
+
+
+{STRING_CONST} {
+   return DOMAIN_TAG::TAG_STRING_CONST;
+}
+
+{CHAR_CONST} {
+   return DOMAIN_TAG::TAG_CHAR_CONST;
+}
+
+\#\#.*\n {
+  return DOMAIN_TAG::TAG_COMMENT;
+}
+
+
+\#[A-Za-z0-9 \n]*\# {
+   return DOMAIN_TAG::TAG_COMMENT;
+}
+
+<<EOF>> {
+   return DOMAIN_TAG::END;
+}
+
+\( {
+   return DOMAIN_TAG::TAG_LB;
+}
+
+\) {
+   return DOMAIN_TAG::TAG_RB;
+}
+
+\[ {
+   return DOMAIN_TAG::TAG_LBC;
+}
+
+\] {
+   return DOMAIN_TAG::TAG_RBC;
+}
+
+\, {
+   return DOMAIN_TAG::TAG_COMMA;
+}
+
+
+\; {
+   return DOMAIN_TAG::TAG_SEMICOLON;
+}
+
+\* {
+   return DOMAIN_TAG::TAG_MUL;
+}
+\/ {
+   return DOMAIN_TAG::TAG_DIV;
+}
+\+ {
+
+   return DOMAIN_TAG::TAG_PLUS;
+}
+\- {
+   
+   return DOMAIN_TAG::TAG_MINUS;
+}
+
+\~ {
+   return DOMAIN_TAG::TAG_TILDA;
+}
+
+\=\= {
+   return DOMAIN_TAG::TAG_EQ;
+}
+
+\!\= {
+   return DOMAIN_TAG::TAG_NE;
+}
+
+\< {
+   return DOMAIN_TAG::TAG_LT;
+}
+
+\> {
+   return DOMAIN_TAG::TAG_GT;
+}
+
+\<= {
+   return DOMAIN_TAG::TAG_LE;
+}
+
+\>= {
+   return DOMAIN_TAG::TAG_GE;
+}
+
+\% {
+   return DOMAIN_TAG::TAG_MOD;
+}
+
+\@ {
+   return DOMAIN_TAG::TAG_XOR;
+}
+
+\^ {
+   return DOMAIN_TAG::TAG_POW;
+}
+
+\:\= {
+   return DOMAIN_TAG::TAG_ASSIGN;
+}
+
+\<\- {
+   return DOMAIN_TAG::TAG_BACK;
+}
+
+\= {
+   return DOMAIN_TAG::TAG_FUNCBODYSTART;
+}
+
+\. {
+   return DOMAIN_TAG::TAG_DOT;
+}
+
+
+
+[ \t\r\n]+ {
+}
+
+. {
+   throw std::runtime_error("error token!");
+}
+
+%%
+```
+
+### Parser.y
+
+
+```c++
+%skeleton "lalr1.cc"
+%require  "3.0"
+%language "c++"
+
+%define api.namespace { ps }
+%define api.parser.class { Parser }
+
+
+%code requires{
+  class Driver;
+  class Scanner;
+}
+
+
+%parse-param{ Scanner & scanner }
+%parse-param{ Driver & driver }
+
+
+
+%code{
+   #include <iostream>
+   #include <string>
+
+  /* include for all driver functions */
+#include "scanner.hpp"
+#include "driver.hpp"
+
+#undef yylex
+#define yylex scanner.lex
+}
+
+%define api.value.type variant
+
+%token END 0
+%token <std::string>
+TAG_OR 
+TAG_XOR
+TAG_AND
+TAG_EQ 
+TAG_NE 
+TAG_LT 
+TAG_GT 
+TAG_LE 
+TAG_GE
+TAG_PLUS 
+TAG_MINUS
+TAG_POW
+TAG_MUL 
+TAG_DIV 
+TAG_MOD
+TAG_NOT
+TAG_LB
+TAG_RB
+TAG_LBC
+TAG_RBC
+TAG_COMMA
+TAG_SEMICOLON
+TAG_TILDA
+TAG_BACK
+TAG_FUNCBODYSTART
+TAG_DOT
+TAG_CHAR_CONST
+TAG_STRING_CONST
+TAG_VARNAME
+TAG_BOOL
+TAG_CHAR
+TAG_INT
+TAG_FALSE
+TAG_ELSE
+TAG_TRUE
+TAG_REF_CONST
+TAG_RETURN
+TAG_WHILE
+TAG_VOID
+TAG_LOOP
+TAG_THEN
+TAG_NUMBER
+TAG_ASSIGN
+TAG_COMMENT
+
+%nterm inc dec
+%nterm <std::string>
+NProgram
+NFunction
+NFunctionHeader
+NType
+NBasicType
+NFuncParamStatements
+NFuncParams
+NFuncParam
+NFuncBody
+NStatements
+NStatement
+NDeclarationStatement
+NVarDeclarations
+NVarDeclaration
+NAssignmentStatement
+NSpec
+NPrim
+NConst
+NExpr
+NLogicalExpression
+NCompareOperator
+NCompareExpression
+NCallExpression
+NArgs
+NAdditiveOperator
+NArithmeticExpression
+NMultiplicativeExpression
+NMultiplicativeOperator
+NTerm
+NFactor
+NIfElseStatement
+NIfStatement
+NElseBlock
+NLoopForStatement
+NLoopWhileStatement
+NLoopPostStatement
+NCycle
+NCycleVar
+NReturnStatement
+
+
+%%
+%start NProgram;
+
+NProgram:
+NProgram NFunction {$$ = $1 + '\n' + $2; driver.result = $$;}
+| NFunction {$$ = $1;}
+;
+
+
+NFunction:
+	NFunctionHeader TAG_FUNCBODYSTART inc NFuncBody dec {
+	$$ = $1 + ' ' + $2;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $4;
+	$$ += '\n' + std::string(driver.enclosure, '\t');
+}
+;
+
+inc: %empty {driver.enclosure++;};
+dec: %empty {driver.enclosure--;};
+
+NFunctionHeader:
+	NType  TAG_VARNAME TAG_BACK NFuncParamStatements {$$ = $1 + ' ' + $2 + ' ' + $3 + ' ' + $4;}
+	| TAG_VOID TAG_VARNAME TAG_BACK NFuncParamStatements {$$ = $1 + ' ' + $2 + ' ' + $3 + $4;}
+	| TAG_VOID TAG_VARNAME {$$ = $1 + ' ' + $2;}
+;
+
+
+NType:
+	NBasicType {$$ = $1;}
+	| NType TAG_LBC TAG_RBC {$$ = $1 + $2 + $3;} 
+;
+
+NBasicType: 
+	TAG_INT {$$ = $1;}
+	| TAG_CHAR {$$ = $1;}
+	| TAG_BOOL {$$ = $1;};
+
+NFuncParamStatements: 
+	NFuncParams {$$ = $1;}
+;
+
+NFuncParams: 
+	NFuncParams TAG_COMMA NFuncParam {$$ = $1 + ' ' + $2 + ' ' + $3;}
+	| NFuncParam {$$ = $1;}
+;
+
+NFuncParam: 
+	NType TAG_VARNAME {$$ = $1 + ' ' + $2;}
+;
+
+NFuncBody:
+	NStatements  TAG_DOT {$$ = $1 + '\n' + std::string(driver.enclosure, '\t') + $2;} 
+;
+
+NStatements:
+	NStatements TAG_SEMICOLON NStatement {$$ = $1 + $2 + '\n' + std::string(driver.enclosure, '\t') + $3;}
+	| NStatement {$$ = $1;}
+;
+
+
+NStatement:
+	NDeclarationStatement {$$ = $1;}
+	| NAssignmentStatement {$$ = $1;}
+	| NCallExpression {$$ = $1;}
+	| NIfStatement {$$ = $1;}
+	| NIfElseStatement {$$ = $1;}
+	| NLoopWhileStatement {$$ = $1;}
+	| NLoopForStatement {$$ = $1;}
+	| NReturnStatement {$$ = $1;}
+	| NLoopPostStatement {$$ = $1;}
+;
+
+NDeclarationStatement:
+	NType NVarDeclarations {$$ = $1 + ' ' + $2;}
+;
+
+NVarDeclarations: 
+	NVarDeclarations TAG_COMMA NVarDeclaration {$$ = $1 + $2 + ' ' + $3;}
+	| NVarDeclaration {$$ = $1;}
+;
+
+NVarDeclaration: 
+	TAG_VARNAME TAG_ASSIGN NArithmeticExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+	| TAG_VARNAME {$$ = $1;}
+;
+
+NAssignmentStatement: 
+	NSpec TAG_ASSIGN NExpr {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NSpec: 
+	TAG_LB NType NPrim TAG_RB {$$ = $1 + $2 + ' ' + $3 + $4;}
+	| NSpec NPrim {$$ = $1 + ' ' + $2;}
+	| NPrim {$$ = $1;}
+;
+	
+NPrim:
+	NConst {$$ = $1;}
+	| TAG_VARNAME {$$ = $1;}
+	| TAG_LB NExpr TAG_RB {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+
+NConst: 
+	TAG_NUMBER {$$ = $1;}
+	| TAG_CHAR_CONST {$$ = $1;}
+	| TAG_REF_CONST {$$ = $1;}
+	| TAG_STRING_CONST {$$ = $1;}
+	| TAG_TRUE {$$ = $1;}
+	| TAG_FALSE {$$ = $1;}
+;
+
+NExpr: 
+	NLogicalExpression {$$ = $1;}
+	| NExpr TAG_OR NLogicalExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+	| NExpr TAG_XOR NLogicalExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NLogicalExpression: 
+	NCompareExpression {$$ = $1;}
+	| NLogicalExpression TAG_AND NCompareExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NCompareOperator:
+	TAG_EQ {$$ = $1;}
+	| TAG_NE {$$ = $1;}
+	| TAG_LE {$$ = $1;}
+	| TAG_LT {$$ = $1;}
+	| TAG_GE {$$ = $1;}
+	| TAG_GT {$$ = $1;}
+;
+
+
+NCompareExpression: 
+	NCallExpression {$$ = $1;}
+	| NCompareExpression NCompareOperator NCallExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NCallExpression: 
+	NArithmeticExpression {$$ = $1;}
+	| TAG_VARNAME TAG_BACK NArgs {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NArgs: 
+	NArithmeticExpression {$$ = $1;}
+	| NArgs TAG_COMMA NArithmeticExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NAdditiveOperator:
+	TAG_PLUS {$$ = $1;}
+	| TAG_MINUS {$$ = $1;}
+;
+
+NArithmeticExpression: 
+	NMultiplicativeExpression {$$ = $1;}
+	| NArithmeticExpression NAdditiveOperator NMultiplicativeExpression {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NMultiplicativeExpression: 
+	NTerm {$$ = $1;}
+	| NMultiplicativeExpression NMultiplicativeOperator NTerm {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NMultiplicativeOperator: 
+	TAG_MUL {$$ = $1;}
+	| TAG_DIV {$$ = $1;}
+	| TAG_MOD {$$ = $1;}
+;
+
+NTerm:  
+	NFactor {$$ = $1;}
+	| NFactor TAG_POW NTerm {$$ = $1 + ' ' + $2 + ' ' + $3;}
+;
+
+NFactor:
+	TAG_NOT NSpec {$$ = $1 + ' ' + $2;}
+	| TAG_MINUS NSpec {$$ = $1 + ' ' + $2;}
+	| NSpec {$$ = $1;}
+; 
+
+NIfElseStatement: 
+	NExpr TAG_THEN inc NStatements dec NElseBlock TAG_DOT {
+	$$ = $1 + ' ' + $2;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $4;
+	$$ += '\n' + std::string(driver.enclosure, '\t');
+	$$ += $6 + ' ' + $7;
+}
+;
+
+NIfStatement: 
+	NExpr TAG_THEN inc NStatements TAG_DOT dec {
+	$$ = $1 + ' ' + $2;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $4 + ' ' + $5;
+}
+;
+
+NElseBlock: 
+	TAG_ELSE inc NStatements dec {
+	$$ = $1;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $3;
+}
+;
+
+
+NLoopWhileStatement: 
+	NExpr TAG_LOOP inc NStatements TAG_DOT dec {
+	$$ = $1 + ' ' + $2;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $4 + ' ' + $5;
+} 
+;
+
+NLoopForStatement: 
+	NCycle inc NStatements TAG_DOT dec {
+	$$ = $1;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $3 + ' ' + $4;
+} 
+;
+
+NLoopPostStatement: 
+	TAG_LOOP inc NStatements dec TAG_WHILE NExpr TAG_DOT {
+	$$ = $1;
+	$$ += '\n' + std::string(driver.enclosure + 1, '\t');
+	$$ += $3;
+	$$ += '\n' + std::string(driver.enclosure, '\t');
+	$$ += $5 + ' ' + $6 + ' ' + $7;
+}
+;
+
+NCycle: 
+	NExpr TAG_TILDA NExpr TAG_LOOP NCycleVar {$$ = $1 + ' ' + $2 + ' ' + $3 + ' ' + $4 + ' ' + $5;}
+;
+NCycleVar: 
+	TAG_VARNAME {$$ = $1;}
+;
+
+NReturnStatement: 
+	TAG_RETURN NExpr {$$ = $1 + ' ' + $2;}
+;
+%%
+
+
+void ps::Parser::error(const std::string& err_message)
+{
+  std::cerr << "Error: " << err_message;
+}
+```
+
+# Тестирование
+
+Входные данные
+
+```
+int {Main} <- char [][] {args} =
+    								char {c};
+    				int {x} := - 1;
+    int[] {A} := (int 5), {B} := (int 10);
+    ({Func} <- {a} , {b} , {c})({i} + 1) := {t};
+    						int {size} := ({Length} <- {A} , {B});
+
+
+		    int {x}, {y} := {B} 3 , {z} := {y};
+
+    						{x} := 2 * {a} + 10;
+		    {A} 5  := {B} 6 * 10;
+
+							    {a} < 0 then
+									        {sign} := - 1 . ;
+
+    {a}<0 			 then
+		        {sign} 		:= - 1
+    else
+    {a} == 0 then        {sign} := 0 else {sign} := 1 . . ;
+    char {letter};
+    $"A"~$"Z"loop{letter}
+        {Print}<-{letter}.;
+
+    {i} := 0;
+    loop
+        {i} := {i} + 1
+    while {i} < 5 . ;    {i} < 10 loop
+        {i} := {i} + 
+
+1 . ;
+
+return 0 .
+
+
+int[] {SumVectors} <- int[] {A}, int[] {B} =
+    int {size} := ({Length} <- {A} , {B});
+    int[] {C} := (int {size});
+    ( {Func} <- {a} , {b} , {c} ) ( {i} + 1 ) := {t};
+    0 ~ {size} - 1 loop {i}
+        {C} {i} := {A} {i} + {B} {i} . ;
+
+    return {C} .
+
+```
+
+Вывод на `stdout`
+
+```
+int {Main} <- char[][] {args} =
+        char {c};
+        int {x} := - 1;
+        int[] {A} := (int 5), {B} := (int 10);
+        ( {Func} <- {a} , {b} , {c} ) ( {i} + 1 ) := {t};
+        int {size} := ( {Length} <- {A} , {B} );
+        int {x}, {y} := {B} 3, {z} := {y};
+        {x} := 2 * {a} + 10;
+        {A} 5 := {B} 6 * 10;
+        {a} < 0 then
+                {sign} := - 1 .;
+        {a} < 0 then
+                {sign} := - 1
+        else
+                {a} == 0 then
+                        {sign} := 0
+                else
+                        {sign} := 1 . .;
+        char {letter};
+        $"A" ~ $"Z" loop {letter}
+                {Print} <- {letter} .;
+        {i} := 0;
+        loop
+                {i} := {i} + 1
+        while {i} < 5 .;
+        {i} < 10 loop
+                {i} := {i} + 1 .;
+        return 0
+        .
+
+int[] {SumVectors} <- int[] {A} , int[] {B} =
+        int {size} := ( {Length} <- {A} , {B} );
+        int[] {C} := (int {size});
+        ( {Func} <- {a} , {b} , {c} ) ( {i} + 1 ) := {t};
+        0 ~ {size} - 1 loop {i}
+                {C} {i} := {A} {i} + {B} {i} .;
+        return {C}
+        .
+
+```
+
+# Вывод
+В ходе лабораторной работы научился применять генератор синтаксических анализаторов bison. Лабораторная
+работа не была сложной, потому что уже был опыт работы с flex из лабораторной работы 1.5, а так же потому
+что на момент написания этой лабораторной работы у меня, наконец, появилась грамматика для языка L2.
+Поэтому лабораторная работа по большей части состояла из переписывания грамматики в форму bison.
+Лабораторная была бы труднее, если бы я ее делал не на C++, а на C, так как последний не позволяет
+создавать удобные конструкции для форматирования, как это представлено у меня. Так же во время
+тестирования программы я столкнулся с проблемой, связанной с ошибками компилятора GCC, когда для того,
+чтобы собрать проект подключались библиотеки не имеющие никакого отношения к программе, и поэтому я
+сменил компилятор на CLang.
+

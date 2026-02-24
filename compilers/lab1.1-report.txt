@@ -1,0 +1,247 @@
+% Лабораторная работа № 1.1. Раскрутка самоприменимого компилятора
+% 14 февраля 2024 г.
+% Павел Богданов, ИУ9-61Б
+ 
+# Цель работы
+Целью данной работы является ознакомление с раскруткой самоприменимых компиляторов на примере модельного
+компилятора.
+
+# Индивидуальный вариант
+Компилятор **P5**. Заменить операторы `div` и `mod` на `//` и `%` соответственно.
+ 
+# Реализация
+
+Различие между файлами `pcom.pas` и `pcom2.pas`:
+
+```
+***** pcom.pas
+   maxstd     = 39;  { number of standard identifiers }
+   maxres     = 35;  { number of reserved words }
+   reslen     = 9;   { maximum length of reserved words }
+***** PCOM2.PAS
+   maxstd     = 39;  { number of standard identifiers }
+   maxres     = 36;  { number of reserved words }
+   reslen     = 9;   { maximum length of reserved words }
+*****
+
+***** pcom.pas
+      special:
+        begin sy := ssy[ch]; op := sop[ch];
+          nextch
+        end;
+      chspace: sy := othersy
+***** PCOM2.PAS
+      special:
+          begin
+           if ch = '/' then
+            begin nextch;
+                        if ch = '/' then
+                                begin sy := rsy[36]; op := rop[36];
+                                nextch
+                                end;
+                        end
+                        else
+                                begin sy := ssy[ch]; op := sop[ch];
+                                        nextch
+                                end;
+                end;
+      chspace: sy := othersy
+*****
+
+***** pcom.pas
+      rw[31] := 'downto   '; rw[32] := 'packed   '; rw[33] := 'program  ';
+      rw[34] := 'function '; rw[35] := 'procedure';
+      frw[1] :=  1; frw[2] :=  1; frw[3] :=  7; frw[4] := 16; frw[5] := 23;
+***** PCOM2.PAS
+      rw[31] := 'downto   '; rw[32] := 'packed   '; rw[33] := 'program  ';
+      rw[34] := 'function '; rw[35] := 'procedure'; rw[36] := '//       ';
+      frw[1] :=  1; frw[2] :=  1; frw[3] :=  7; frw[4] := 16; frw[5] := 23;
+*****
+
+***** pcom.pas
+      rsy[31] := downtosy;  rsy[32] := packedsy;  rsy[33] := progsy;
+      rsy[34] := funcsy;    rsy[35] := procsy;
+      ssy['+'] := addop ;   ssy['-'] := addop;    ssy['*'] := mulop;
+***** PCOM2.PAS
+      rsy[31] := downtosy;  rsy[32] := packedsy;  rsy[33] := progsy;
+      rsy[34] := funcsy;    rsy[35] := procsy;    rsy[36] := mulop;
+      ssy['+'] := addop ;   ssy['-'] := addop;    ssy['*'] := mulop;
+*****
+
+***** pcom.pas
+      ssy['^'] := arrow ;   ssy['<'] := relop;    ssy['>'] := relop;
+      ssy[';'] := semicolon; ssy['@'] := arrow;
+    end (*symbols*) ;
+***** PCOM2.PAS
+      ssy['^'] := arrow ;   ssy['<'] := relop;    ssy['>'] := relop;
+      ssy[';'] := semicolon; ssy['@'] := arrow;   ssy['%'] := mulop;
+    end (*symbols*) ;
+*****
+
+***** pcom.pas
+      rop[5] := inop; rop[10] := idiv; rop[11] := imod;
+      rop[6] := orop; rop[13] := andop;
+      for i := ordminchar to ordmaxchar do sop[chr(i)] := noop;
+***** PCOM2.PAS
+      rop[5] := inop; rop[10] := idiv; rop[11] := imod;
+      rop[6] := orop; rop[13] := andop; rop[36] := idiv;
+      for i := ordminchar to ordmaxchar do sop[chr(i)] := noop;
+*****
+
+***** pcom.pas
+      sop['+'] := plus; sop['-'] := minus; sop['*'] := mul; sop['/'] := rdiv;
+      sop['='] := eqop; sop['<'] := ltop;  sop['>'] := gtop;
+    end (*rators*) ;
+***** PCOM2.PAS
+      sop['+'] := plus; sop['-'] := minus; sop['*'] := mul; sop['/'] := rdiv;
+      sop['='] := eqop; sop['<'] := ltop;  sop['>'] := gtop; sop['%'] := imod;
+    end (*rators*) ;
+*****
+
+***** pcom.pas
+      chartp['{'] := chlcmt  ; chartp['}'] := special ;
+      chartp['@'] := special ;
+
+***** PCOM2.PAS
+      chartp['{'] := chlcmt  ; chartp['}'] := special ;
+      chartp['@'] := special ; chartp['%'] := special ;
+
+*****
+``` 
+
+Различие между файлами `pcom2.pas` и `pcom3.pas`:
+
+```
+***** pcom2.pas
+    l := flc-1;
+    flc := l + k  -  (k+l) mod k
+  end (*align*);
+***** PCOM3.PAS
+    l := flc-1;
+    flc := l + k  -  (k+l) % k
+  end (*align*);
+*****
+
+***** pcom2.pas
+      procedure putic;
+      begin if ic mod 10 = 0 then writeln(prr,'i',ic:5) end;
+
+***** PCOM3.PAS
+      procedure putic;
+      begin if ic % 10 = 0 then writeln(prr,'i',ic:5) end;
+
+*****
+
+***** pcom2.pas
+                              if string(lsp) then
+                                begin len := lsp^.size div charmax;
+                                  if default then
+***** PCOM3.PAS
+                              if string(lsp) then
+                                begin len := lsp^.size // charmax;
+                                  if default then
+*****
+
+***** pcom2.pas
+    ch := ' '; chcnt := 0;
+    mxint10 := maxint div 10;
+    inputhdf := false; { set 'input' not in header files }
+***** PCOM3.PAS
+    ch := ' '; chcnt := 0;
+    mxint10 := maxint // 10;
+    inputhdf := false; { set 'input' not in header files }
+*****
+```  
+# Тестирование
+
+Тестовый пример:
+
+```pascal
+program hello(output);
+
+begin
+   writeln(5 % 2);
+   writeln(5 mod 2);
+   writeln(7 // 2);
+   writeln(7 div 2);
+end.
+``` 
+Вывод тестового примера на `stdout`
+До раскрутки, компилятор выдает ошибки, на неизвестные операции `%` и `//`. После первого преобразования
+компилятора, он принимает все эти операции. После второго преобразования компилятора, он выдает ошибки на
+неизвестные операции `mod` и `div`, так как в моём варианте необходимо заменить эти операции, а не
+оставлять обе вариации.
+
+Вывод `pcom.pas`: 
+
+```
+     1       40 program hello(output);
+     2       40
+     3       40 begin
+     4        3    writeln(5 % 2);
+     4   ****               ^399^6
+     5       12    writeln(5 mod 2);
+     6       21    writeln(7 // 2);
+     6   ****                 ^58
+     7       26    writeln(7 div 2);
+     8       35 end.
+
+Errors in program: 3
+```
+
+Вывод  `pcom2.pas`:
+
+```
+Error numbers in listing:
+-------------------------
+  6  Illegal symbol
+ 58  Error in factor
+399  Feature not implemented
+
+
+
+     1       40 program hello(output);
+     2       40
+     3       40 begin
+     4        3    writeln(5 % 2);
+     5       14    writeln(5 mod 2);
+     6       23    writeln(7 // 2);
+     7       32    writeln(7 div 2);
+     8       41 end.
+
+Errors in program: 0
+
+program complete
+```
+
+Вывод `pcom3.pas`:
+
+```
+     1       40 program hello(output);
+     2       40
+     3       40 begin
+     4        3    writeln(5 % 2);
+     5       12    writeln(5 mod 2);
+     5   ****                ^399^6
+     6       21    writeln(7 // 2);
+     7       26    writeln(7 div 2);
+     7   ****                ^399^6
+     8       35 end.
+
+Errors in program: 4
+
+Error numbers in listing:
+-------------------------
+  6  Illegal symbol
+399  Feature not implemented
+```
+
+Соответственно тестовый пример выполняется только на промежуточном этапе раскрутки.
+
+# Вывод
+В процессе выполнения лабораторной работы понял процесс раскрутки компилятора. Понял, что компиляторы
+раскручиваются, чтобы добавлять дополнительные функции, которые ранее не подразумивались. Лабораторную
+работу я выполнял на системе windows, хотя это и было проблематично, так как чтобы реализовать это,
+необходимо скачать версию компилятора P5, которую можно найти на официальном сайте разработчика, а не
+использовать версию, которая есть в архиве, после чего в нем скомпилировать исходный код, который можно
+найти в архиве.

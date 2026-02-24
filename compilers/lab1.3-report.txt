@@ -1,0 +1,378 @@
+% Лабораторная работа № 1.3 «Объектно-ориентированный лексический анализатор»
+% 13 марта 2023 г.
+% Павел Богданов, ИУ9-61Б
+
+# Цель работы
+Целью данной работы является приобретение навыка реализации лексического анализатора на
+объектно-ориентированном языке без применения каких-либо средств автоматизации решения задачи
+лексического анализа.
+
+# Индивидуальный вариант
+-   Химические вещества: последовательности латинских букв и цифр, начинающиеся с заглавной буквы, при
+этом после цифры не может следовать строчная буква (атрибут: строка). Примеры: «`CuSO4`», «`CH3CH2OH`»,
+«`Fe2O3`».
+-   Коэффициенты: последовательности десятичных цифр. Между коэффициентом и веществом пробел может
+отсутствовать.
+-   Операторы: «`+`», «`->`».
+
+# Реализация
+
+##### класс `Position`:
+
+```python
+ class Position:  
+    def __init__(self, program):  
+        self.__line = 1  
+  self.__pos = 1  
+  self.__index = 0  
+  self.__program = program  
+  
+    def get_char(self):  
+        return self.__program[self.__index]  
+  
+    def __str__(self):  
+        return f'({self.__line}, {self.__pos})'  
+  
+  def is_new_line(self):  
+        if self.__index == '\r' and self.__index + 1 < len(self.__program):  
+            return self.__program[self.__index + 1] == '\n'  
+  return self.__program[self.__index] == '\n'  
+  
+  def is_digit(self):  
+        return self.__program[self.__index].isdigit()  
+  
+    def is_letter(self):  
+        return self.__program[self.__index].isalpha()  
+  
+    def is_lower(self):  
+        return self.__program[self.__index].islower()  
+  
+    def is_space(self):  
+        return self.__program[self.__index].isspace()  
+  
+    def is_spectial_simbol(self):  
+        if self.__program[self.__index] == "+":  
+            return True  
+  
+ if self.__program[self.__index] == "-":  
+            return True  
+  
+ if self.__program[self.__index] == ">":  
+            return True  
+ return False  
+ def next(self):  
+        if self.__index != len(self.__program):  
+            if self.is_new_line():  
+                if self.__program[self.__index] == '\r':  
+                    self.__index += 1  
+  self.__line += 1  
+  self.__pos = 1  
+  else:  
+                self.__pos += 1  
+  self.__index += 1  
+  
+  def raise_error(self):  
+        print("Не удалось распознать лексему: " + self.__str__())  
+        while not self.is_space() and not self.is_new_line():  
+            self.next()  
+            if self.is_new_line():  
+                self.next()  
+        self.skip_spaces()  
+  
+    def skip_spaces(self):  
+        while self.is_space():  
+            self.next()  
+  
+  
+```
+
+##### класс `Fragment`:
+
+```python 
+class Fragment:  
+    def __init__(self, start, follow):  
+        self.__start = start  
+        self.__follow = follow  
+  
+    def __str__(self):  
+        return self.__start.__str__() + "-" + self.__follow.__str__()  
+  
+```
+
+##### класс `DomainTag`:
+
+```python
+class DomainTag:  
+	ELEMENT = 0  
+	COEFF = 1  
+	OPERATION = 2  
+	END_OF_PROGRAM = 3  
+```
+
+##### классы `Token`, `ErrorToken`,`OperationToken`,`CoeffToken`, `ElementToken`, `EndToken`:
+
+```python
+class Token:  
+    def __init__(self, tag, start, follow):  
+        self.tag = tag  
+        self.coords = Fragment(start, follow)  
+        super().__init__()  
+  
+class ErrorToken(Token):  
+    def __init__(self, code, start, follow):  
+        super(ErrorToken, self).__init__(DomainTag.COEFF, start, follow)  
+        self.code = code  
+  
+    def __str__(self):  
+        return 'ERROR ' + self.coords.__str__() + ": " + str(self.code)  
+  
+class OperationToken(Token):  
+    def __init__(self, code, start, follow):  
+        super(OperationToken, self).__init__(DomainTag.OPERATION, start, follow)  
+        self.code = code  
+  
+    def __str__(self):  
+        return 'OPERATION ' + self.coords.__str__() + ": " + str(self.code)  
+  
+class CoeffToken(Token):  
+    def __init__(self, code, start, follow):  
+        super(CoeffToken, self).__init__(DomainTag.COEFF, start, follow)  
+        self.code = code  
+  
+    def __str__(self):  
+        return 'COEFF ' + self.coords.__str__() + ": " + str(self.code)  
+  
+  
+class ElementToken(Token):  
+    def __init__(self, code, start, follow):  
+        super(ElementToken, self).__init__(DomainTag.ELEMENT, start, follow)  
+        self.code = code  
+  
+    def __str__(self):  
+        return 'ELEMENT ' + self.coords.__str__() + ": " + str(self.code)  
+  
+class EndToken(Token):  
+    def __init__(self, start, follow):  
+        super(EndToken, self).__init__(DomainTag.END_OF_PROGRAM, start, follow)  
+  
+    def __str__(self):  
+        return 'END ' + self.coords.__str__()  
+```
+
+  ##### класс `Lexer`:
+
+```python
+class Lexer:  
+    def __init__(self, input_text):  
+        self.__name_codes = {}  
+        self.ElementFlag = False  
+  
+  input_text += " " + chr(0)  
+        self.pos = Position(list(input_text))  
+  
+    def next_token(self):  
+        self.pos.skip_spaces()  
+        if self.pos.get_char() == chr(0):  
+            return EndToken(self.pos, self.pos)  
+        if not (self.pos.is_digit() or self.pos.is_letter() or self.pos.is_spectial_simbol()):  
+            self.pos.raise_error()  
+            return self.next_token()  
+        token, self.ElementFlag = self.lexer_func()  
+        if token:  
+            return token  
+        else:  
+            return self.next_token()  
+  
+    def lexer_func(self):  
+        string = ""  
+  start = deepcopy(self.pos)  
+        cur = self.pos  
+  
+        fl = True  
+  pos = self.pos  
+  if not self.ElementFlag:  
+            if self.pos.is_spectial_simbol():  
+                string += self.pos.get_char()  
+                cur = self.pos  
+                self.pos.next()  
+                if string == '+':  
+                    return OperationToken(string, start, cur), False  
+ if string == "-":  
+                    if self.pos.is_spectial_simbol():  
+                        string += self.pos.get_char()  
+                        cur = self.pos  
+                        self.pos.next()  
+                        if string == "->":  
+                            return OperationToken(string, start, cur), False  
+ else:  
+                            start.raise_error()  
+                            return False, False  
+ else:  
+                        start.raise_error()  
+                        return False, False  
+ if string == '>':  
+                    start.raise_error()  
+                    return False, False  
+  while True:  
+  if not self.pos.is_digit() and not self.pos.is_letter() and not self.pos.is_spectial_simbol() and not
+self.pos.is_space():  
+                    self.pos.raise_error()  
+                    return False, False  
+  
+ if self.pos.is_digit() and fl:  
+                    string += self.pos.get_char()  
+                    cur = self.pos  
+                    self.pos.next()  
+                    continue  
+  
+ if self.pos.is_digit() and not fl:  
+                    start.raise_error()  
+                    while not self.pos.is_spectial_simbol() and not self.pos.is_space() and not
+self.pos.is_digit() and not self.pos.is_letter():  
+                        self.pos.next()  
+   
+  
+ if self.pos.is_space() and fl:  
+                    pos = deepcopy(self.pos)  
+                    fl = False  
+  self.pos.next()  
+                    continue  
+
+  if self.pos.is_space() and not fl:  
+                    self.pos.next()  
+                    continue  
+  
+ if self.pos.is_spectial_simbol():  
+                    start.raise_error()  
+                    while not self.pos.is_spectial_simbol() and not self.pos.is_space():  
+                        self.pos.next()  
+                    return False, False  
+  
+ if self.pos.is_letter():  
+                    if not self.pos.is_lower():  
+                        if len(string) > 0:  
+                            return CoeffToken(string, start, pos), True  
+ else:  
+                            return False, True  
+ else:  
+                        start.raise_error()  
+                        while not self.pos.is_spectial_simbol() and not self.pos.is_space():  
+                            self.pos.next()  
+                        return False, False  
+  
+  if self.pos.is_lower():  
+            self.pos.raise_error()  
+            while not self.pos.is_spectial_simbol() or not self.pos.is_space():  
+                self.pos.next()  
+            return False, False  
+ else:  
+            numberFlag = False  
+  
+ while True:  
+              
+  if not self.pos.is_digit() and not self.pos.is_letter() and not self.pos.is_spectial_simbol() and not
+self.pos.is_space():  
+                self.pos.raise_error()  
+                return False, False  
+  
+ if self.pos.is_letter() and not numberFlag:  
+                string += self.pos.get_char()  
+                cur = self.pos  
+                self.pos.next()  
+                continue  
+  
+ if self.pos.is_digit():  
+                numberFlag = True  
+  string += self.pos.get_char()  
+                cur = self.pos  
+                self.pos.next()  
+                continue  
+  
+ if self.pos.is_letter() and numberFlag:  
+                str = self.pos.get_char()  
+                  
+  if self.pos.is_lower():  
+                    start.raise_error()  
+                    while not self.pos.is_spectial_simbol() and not self.pos.is_space():  
+                        self.pos.next()  
+                      
+  return False, False  
+ else:  
+                    numberFlag = False  
+  string += self.pos.get_char()  
+                    cur = self.pos  
+                    self.pos.next()  
+                    continue  
+  
+ if self.pos.is_space() or self.pos.is_spectial_simbol():  
+                return ElementToken(string, start, cur), False  
+  
+  
+if __name__ == '__main__':  
+    with open('test2.txt', 'r') as f:  
+        text = f.read()  
+    lexer = Lexer(text)  
+    token = None  
+ while type(token) != EndToken:  
+        token = lexer.next_token()  
+        print(token)  
+```
+
+# Тестирование
+
+### входные данные
+
+```
+22Fe2O3+>+-5 6 434  C -> 2 Fe + 3 CO2
+
+2 Fe2o3+6 c->2f E+ 3 Co2
+```
+
+### вывод на `stdout`
+
+```
+COEFF (1, 1)-(1, 3): 22
+ELEMENT (1, 3)-(1, 8): Fe2O3
+OPERATION (1, 8)-(1, 9): +
+Не удалось распознать лексему: (1, 9)
+OPERATION (1, 10)-(1, 11): +
+Не удалось распознать лексему: (1, 11)
+Не удалось распознать лексему: (1, 12)
+Не удалось распознать лексему: (1, 14)
+COEFF (1, 16)-(1, 19): 434
+ELEMENT (1, 21)-(1, 22): C
+OPERATION (1, 23)-(1, 25): ->
+COEFF (1, 26)-(1, 27): 2
+ELEMENT (1, 28)-(1, 30): Fe
+OPERATION (1, 31)-(1, 32): +
+COEFF (1, 33)-(1, 34): 3
+ELEMENT (1, 35)-(1, 38): CO2
+COEFF (3, 1)-(3, 2): 2
+Не удалось распознать лексему: (3, 3)
+OPERATION (3, 8)-(3, 9): +
+Не удалось распознать лексему: (3, 9)
+OPERATION (3, 12)-(3, 14): ->
+Не удалось распознать лексему: (3, 14)
+ELEMENT (3, 17)-(3, 18): E
+OPERATION (3, 18)-(3, 19): +
+COEFF (3, 20)-(3, 21): 3
+ELEMENT (3, 22)-(3, 25): Co2
+END (3, 26)-(3, 26)
+```
+
+# Вывод
+В ходе данной лабораторной работы был получен навык реализации лексического анализатора на 
+объектно-ориентированном языке без применения каких-либо средств автоматизации решения задачи 
+лексического анализа. Также в соответствии с индивидуальным вариантом были реализованы необходимые 
+первые фазы стадии анализа (чтение входного потока и лексических анализ). 
+
+Этот тип лексических анализаторов, по ощущениям, сложнее создать, чем те, что в прошлой лабораторной
+работе, однако благодаря нему, можно досконально понять работу лексического анализатора. 
+
+В моей лабораторной работе сделано так, что весь входной файл считывается в программу, что может быть
+довольно затратно в памяти. Это можно исправить, сделав лексический анализатор однопроходным. Для того,
+чтобы его создать, в моей реализации необходимо изменить считывание всего файла, на считывание только
+одного символа.
+
+Самое сложное в процессе создания, было правильно сделать так, чтобы случайные цифры не конкатенировались
+с коэффициентами химических элементов.

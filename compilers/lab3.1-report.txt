@@ -1,0 +1,865 @@
+% Лабораторная работа № 3.1 «Самоприменимый генератор компиляторов на основе предсказывающего анализа»
+% 7 июня 2024 г.
+% Павел Богданов, ИУ9-61Б
+
+# Цель работы
+Целью данной работы является изучение алгоритма построения таблиц предсказывающего анализатора.
+
+# Индивидуальный вариант
+
+```
+# объявления 
+non-terminal E, E1, T, T1, F; terminal '+', '*', '(', ')', n;
+
+# правила грамматики 
+E ::= T E1; 
+E1 ::= '+' T E1 | epsilon; 
+T ::= F T1; 
+T1 ::= '*' F T1 | epsilon; 
+F ::= n | '(' E ')'; 
+
+axiom E;
+```
+
+# Грамматика на входном языке
+
+### грамматика, полученная в лабораторной работе 2.3
+
+```
+GRAMMAR -> non_Terms NTERM NTERMS terms TERM TERMS RULE SEMICOLON RULES AXIOM END
+NTERMS -> COMMA NTERM NTERMS | SEMICOLON  
+TERMS -> COMMA TERM TERMS | SEMICOLON  
+NTERM -> LETTER .  
+TERM -> SYMBOL .  
+RULES -> RULE SEMICOLON RULES | ε   
+RULE -> NTERM EQV ELEMENT SEQUENCE  
+SEQUENCE -> OR ELEMENT SEQUENCE | ε 
+ELEMENT -> NTERM ELEMENT | TERM ELEMENT | EPSILON | ε
+AXIOM -> axiom NTERM SEMICOLON
+```
+
+### грамматика, которую мы используем для самоприменимости
+
+```
+non-terminal G, N, T, N1, T1, S, E, A, R, R1;  
+terminal 'non_Terms', 'terms', 'axiom', 'EPSILON', 'SYMBOL', 'SEMICOLON', 'LETTER', 'COMMA', 'EQV', 'OR';
+G ::=  'non_Terms' N N1 'terms' T T1 R 'SEMICOLON' R1 A;  
+N1 ::= 'COMMA' N N1 | 'SEMICOLON';  
+T1 ::= 'COMMA' T T1 | 'SEMICOLON';  
+N ::= 'LETTER';  
+T ::= 'SYMBOL';  
+R1 ::= R 'SEMICOLON' R1 | epsilon;  
+R ::= N 'EQV' E S;  
+S ::= 'OR' E S | epsilon;  
+E ::= N E | T E | 'EPSILON' | epsilon;  
+A ::= 'axiom' N 'SEMICOLON';  
+  
+axiom G;
+```
+
+# Реализация
+
+### main
+
+```python
+from table_generator.gen_lexer import Lexer, Lexer_self  
+from predicrer import Predicter  
+import table_generator.table_generator  
+  
+  
+def grammar_args():  
+    GRAMMAR = 'GRAMMAR'  
+  
+  axiom = 'axiom'  
+  
+  non_Terms = 'non_Terms'  
+  terms = 'terms'  
+  RULE = 'RULE'  
+  RULES = 'RULES'  
+  SEQUENCE = 'SEQUENCE'  
+  SEMICOLON = 'SEMICOLON'  
+  AXIOM = 'AXIOM'  
+  
+  ELEMENT = 'ELEMENT'  
+  
+  SYMBOL = 'SYMBOL'  
+  COMMA = 'COMMA'  
+  LETTER = 'LETTER'  
+  
+  OR = 'OR'  
+  EQV = 'EQV'  
+  EPSILON = 'EPSILON'  
+  
+  NTERM = 'NTERM'  
+  NTERMS = 'NTERMS'  
+  
+  TERM = 'TERM'  
+  TERMS = 'TERMS'  
+  
+  END = "END"  
+  
+  terminals = [non_Terms, terms, axiom, EPSILON, SYMBOL, SEMICOLON, LETTER, COMMA, EQV, OR]  
+    nonterminals = [GRAMMAR, NTERM, TERM, NTERMS, TERMS, SEQUENCE, ELEMENT, AXIOM, RULE, RULES]  
+    table = {  
+        (GRAMMAR, non_Terms): [non_Terms, NTERM, NTERMS, terms, TERM, TERMS, RULE, SEMICOLON, RULES, AXIOM],
+        (NTERMS, SEMICOLON): [SEMICOLON],  
+        (NTERMS, COMMA): [COMMA, NTERM, NTERMS],  
+  
+        (TERMS, COMMA): [COMMA, TERM, TERMS],  
+        (TERMS, SEMICOLON): [SEMICOLON],  
+  
+        (NTERM, LETTER): [LETTER],  
+  
+        (TERM, SYMBOL): [SYMBOL],  
+  
+        (RULES, LETTER): [RULE, SEMICOLON, RULES],  
+        (RULES, axiom): [],  
+  
+        (RULE, LETTER): [NTERM, EQV, ELEMENT, SEQUENCE],  
+  
+        (SEQUENCE, SEMICOLON): [],  
+        (SEQUENCE, OR): [OR, ELEMENT, SEQUENCE],  
+  
+  
+        (ELEMENT, LETTER): [NTERM, ELEMENT],  
+        (ELEMENT, SYMBOL): [TERM, ELEMENT],  
+        (ELEMENT, EPSILON): [EPSILON],  
+        (ELEMENT, SEMICOLON): [],  
+        (ELEMENT, OR): [],  
+  
+        (AXIOM, axiom): [axiom, NTERM, SEMICOLON]  
+  
+    }  
+    return terminals, nonterminals, table, GRAMMAR  
+  
+  
+if __name__ == "__main__":  
+    with open('input/input_grammar.txt') as f:  
+        text1 = f.read()  
+    with open('input/input_grammar1.txt') as f:  
+        text2 = f.read()  
+  
+    lexer_grammar = Lexer(text1 + "$")  
+    lexer_grammar_self = Lexer_self(text2 + "$")  
+    try:  
+        # это грамматика из 2.3  
+  terminals_grammar, nonterminals_grammar, table_grammar, axiom_grammar = grammar_args()  
+  
+        # это строим дерево разбора грамматики из индивидуального варианта  
+  iterator_grammar = lexer_grammar.tokenize()  
+        predicter_grammar = Predicter(iterator_grammar, terminals_grammar, nonterminals_grammar, 
+table_grammar, axiom_grammar)  
+        root = predicter_grammar.top_down_parse()  
+  
+        # это строим дерево разбора грамматики из 2.3, написанной в форме индивидуального варианта  
+  iterator_grammar_self = lexer_grammar_self.tokenize()  
+        predicter_grammar_self = Predicter(iterator_grammar_self, terminals_grammar, 
+nonterminals_grammar, table_grammar, axiom_grammar)  
+        root_self = predicter_grammar_self.top_down_parse()  
+  
+        with open('graphs/graph.dot', 'w') as f:  
+            f.write('digraph {\n')  
+            root.print_graph(f)  
+            f.write('}')  
+        with open('graphs/graph_self.dot', 'w') as f:  
+            f.write('digraph {\n')  
+            root_self.print_graph(f)  
+            f.write('}')  
+  
+        # это строим таблицу разбора грамматики из индивидуального варианта (семантический анализ внутри)  
+  terminals, nonterminals, rules, axiom = table_generator.table_generator.expand_grammar(root)  
+        first = table_generator.table_generator.make_first(nonterminals, terminals, rules)  
+        follow = table_generator.table_generator.make_follow(nonterminals, terminals, 
+rules, axiom, first)  
+        table_generator.table_generator.make_table(terminals, nonterminals, rules, first, 
+follow, axiom, "arith_table.py")  
+  
+        # это строим таблицу разбора грамматики из 2.3, написанной в форме 
+	# индивидуального варианта (семантический анализ внутри)  
+  terminals_self, nonterminals_self, rules_self, axiom_self = 
+	table_generator.table_generator.expand_grammar(root_self)  
+        first_self = table_generator.table_generator.make_first(nonterminals_self, 
+terminals_self, rules_self)  
+        follow_self = table_generator.table_generator.make_follow(nonterminals_self, terminals_self, 
+rules_self, axiom_self, first_self)  
+        table_generator.table_generator.make_table(terminals_self, nonterminals_self, rules_self, 
+first_self, follow_self, axiom_self, "self_table.py")  
+  
+    except ValueError as v:  
+        print(v)
+```
+
+## Генератор компиляторов
+
+`gen_lexer`
+
+```python
+import re  
+  
+  
+class Token:  
+    def __init__(self, token_type, value, line, position):  
+        self.token_type = token_type  
+        self.value = value  
+        self.line = line  
+        self.position = position  
+  
+    def __str__(self):  
+        return self.token_type + " " + self.value  
+  
+  
+class Lexer:  
+    def __init__(self, text):  
+        self.text = text  
+        self.line = 1  
+  self.position = 1  
+  self.tokens = []  
+        self.rules = [  
+            ('non_Terms', r'non-terminal'),  
+            ('terms', r'terminal'),  
+            ('axiom', r'axiom'),  
+            ('EPSILON', r'epsilon'),  
+            ('SYMBOL', r'([n])|(\'[^\, ]*\')'),  
+            ('EQV', r'\:\:\='),  
+            ('OR', r'\|'),  
+            ('COMMA', r'\,'),  
+            ('SEMICOLON', r'\;'),  
+            ('LETTER', r'[A-Za-z][\d+]{0,5}\'?'),  
+            ('END', r'\$'),  
+            ('SPACE', r'\s+')  
+        ]  
+  
+    def tokenize(self):  
+        print('here1')  
+        lines = self.text.splitlines()  
+        for line_num, line in enumerate(lines):  
+            self.position = 1  
+  self.line = line_num + 1  
+  while self.position < len(line) + 1:  
+                for rule in self.rules:  
+                    match = re.match(rule[1], line[self.position - 1:])  
+                    if match:  
+                        if rule[0] != 'SPACE':  
+                            value = match.group()  
+                            self.tokens.append(Token(rule[0], value, self.line, self.position))  
+                        self.position += match.end()  
+                        break  
+ else:  
+                    for token in self.tokens:  
+                        print(token)  
+                    print(f'lexer error ({self.line}, {self.position})\n')  
+                    raise ValueError  
+  
+  return iter(self.tokens)  
+  
+  
+class Lexer_self:  
+    def __init__(self, text):  
+        self.text = text  
+        self.line = 1  
+  self.position = 1  
+  self.tokens = []  
+        self.rules = [  
+            ('non_Terms', r'non-terminal'),  
+            ('terms', r'terminal'),  
+            ('axiom', r'axiom'),  
+            ('EPSILON', r'epsilon'),  
+            ('SYMBOL', r'([n])|(\'[^\, ]*\')'),  
+            ('EQV', r'\:\:\='),  
+            ('OR', r'\|'),  
+            ('COMMA', r'\,'),  
+            ('SEMICOLON', r'\;'),  
+            ('LETTER', r'[A-Za-z][\d+]{0,5}\'?'),  
+            ('END', r'\$'),  
+            ('SPACE', r'\s+')  
+        ]  
+  
+    def tokenize(self):  
+        print('here2')  
+        lines = self.text.splitlines()  
+        for line_num, line in enumerate(lines):  
+            self.position = 1  
+  self.line = line_num + 1  
+  while self.position < len(line) + 1:  
+                for rule in self.rules:  
+                    match = re.match(rule[1], line[self.position - 1:])  
+                    if match:  
+                        if rule[0] != 'SPACE':  
+                            value = match.group()  
+                            self.tokens.append(Token(rule[0], value, self.line, self.position))  
+                        self.position += match.end()  
+                        break  
+ else:  
+                    for token in self.tokens:  
+                        print(token)  
+                    print(f'lexer error ({self.line}, {self.position})\n')  
+                    raise ValueError  
+  
+  return iter(self.tokens)
+```
+
+`Table_generator`
+
+```python
+def expand_nterms(node):  
+    if len(node.children) == 1:  
+        return []  
+    nterms = [node.children[1].children[0].content]  
+    nterms += expand_nterms(node.children[2])  
+    return nterms  
+  
+def expand_rules(node):  
+    if len(node.children) == 1:  
+        return []  
+    rules = expand_rule(node.children[0])  
+    rules += expand_rules(node.children[2])  
+    return rules  
+def expand_element(node):  
+    if len(node.children) == 1:  
+        return []  
+    elements = [node.children[0].children[0].content]  
+    elements += expand_element(node.children[1])  
+  
+    return elements  
+  
+def expand_element1(node):  
+    if len(node.children) == 1:  
+        return [node.children[0].content]  
+    elements = [node.children[0].children[0].content]  
+    elements += expand_element(node.children[1])  
+    return elements  
+def expand_sequence(node):  
+    if len(node.children) == 1:  
+        return []  
+    seq = [expand_element1(node.children[1])]  
+    seq += expand_sequence(node.children[2])  
+    return seq  
+  
+def expand_rule(node):  
+    if len(node.children) == 0:  
+        return []  
+    left = node.children[0].children[0].content  
+    rights = expand_element(node.children[2])  
+  
+    rules = [(left, rights)]  
+    rights = expand_sequence(node.children[3])  
+    if rights:  
+        if isinstance(rights[0], list):  
+            for r in rights:  
+                rules.append((left, r))  
+        else:  
+            rules.append((left, rights))  
+  
+    return rules  
+def expand_grammar(root):  
+    nonterminals = [root.children[1].children[0].content]  
+    nonterminals += expand_nterms(root.children[2])  
+  
+    terminals = [root.children[0].content, root.children[3].content, 
+root.children[4].children[0].content, root.children[7].content, 'epsilon']  
+    terminals += expand_nterms(root.children[5])  
+  
+    rules = expand_rule(root.children[6])  
+    rules += expand_rules(root.children[8])  
+  
+    axiom = root.children[9].children[1].children[0].content  
+  
+    terminals = set(terminals)  
+    nonterminals = set(nonterminals)  
+  
+    assert len(terminals.intersection(nonterminals)) == 0  
+  
+  print('axiom: ', axiom)  
+    print('terminals: ', terminals)  
+    print('nonterminals: ', nonterminals)  
+    print('rules: ')  
+    for rule in rules:  
+        print(rule)  
+  
+    print('\n\n\n\n')  
+  
+    return terminals, nonterminals, rules, axiom  
+  
+  
+def make_first(nonterminals, terminals, rules):  
+    first = {}  
+    for nterm in nonterminals:  
+        first[nterm] = set()  
+    changed = True  
+ while changed:  
+        changed = False  
+ for nonterm, right in rules:  
+            old_power = len(first[nonterm])  
+            if len(right) == 0:  
+                first[nonterm].add("epsilon")  
+            for elem in right:  
+                if elem in terminals:  
+                    first[nonterm].add(elem)  
+                    break  
+ else:  
+                    first[nonterm] = first[nonterm].union(first[elem])  
+                    if 'epsilon' not in first[elem]:  
+                        break  
+ if old_power != len(first[nonterm]):  
+                changed = True  
+ return first  
+  
+  
+def first_of_seq(seq, terminals, first_table):  
+    first = set()  
+    if len(seq) == 0:  
+        first.add("epsilon")  
+    for i, elem in enumerate(seq):  
+        if elem in terminals:  
+            first.add(elem)  
+            break  
+ else:  
+            first = first.union(first_table[elem])  
+            if "epsilon" in first_table[elem]:  
+                if i != (len(seq) - 1):  
+                    first = first.difference({"epsilon"})  
+            else:  
+                break  
+ return first  
+  
+  
+def make_follow(nonterminals, terminals, rules, axiom, first):  
+    follow = {}  
+    for nterm in nonterminals:  
+        follow[nterm] = set()  
+    changed = True  
+  follow[axiom].add("END")  
+    while changed:  
+        changed = False  
+ for nterm, right in rules:  
+            for i, elem in enumerate(right):  
+                if elem in nonterminals:  
+                    old_power = len(follow[elem])  
+                    for j in range(i + 1, len(right) + 1):  
+                        if j == len(right):  
+                            follow[elem] = follow[elem].union(follow[nterm])  
+                        else:  
+                            next_symbol = right[j]  
+                            if next_symbol in terminals:  
+                                follow[elem].add(next_symbol)  
+                                break  
+ else:  
+                                follow[elem] = follow[elem].union(
+first[next_symbol]).difference({"epsilon"})  
+                                if "epsilon" not in first[next_symbol]:  
+                                    break  
+ if len(follow[elem]) != old_power:  
+                        changed = True  
+ return follow  
+  
+  
+def is_ll1(rules, first, follow, nonterminals, terminals):  
+    for nterm in nonterminals:  
+        n_rules = list(filter(lambda x: x[0] == nterm, rules))  
+        if len(n_rules) < 2:  
+            continue  
+ for i in range(len(n_rules) - 1):  
+            for j in range(i + 1, len(n_rules)):  
+                first_u = first_of_seq(n_rules[i][1], terminals, first)  
+                first_v = first_of_seq(n_rules[j][1], terminals, first)  
+                if len(first_u.intersection(first_v)) != 0:  
+                    return False  
+ if "epsilon" in first_u:  
+                    if len(first_v.intersection(follow[nterm])) != 0:  
+                        return False  
+ if "epsilon" in first_v:  
+                    if len(first_u.intersection(follow[nterm])) != 0:  
+                        return False  
+ return True  
+  
+def make_table(terminals, nonterminals, rules, first, follow, axiom, filename):  
+    table = {}  
+    assert is_ll1(rules, first, follow, nonterminals, terminals)  
+    for nterm, right in rules:  
+        first_u = first_of_seq(right, terminals, first)  
+        for a in first_u:  
+            if a != "epsilon":  
+                table[(nterm, a)] = right  
+        if "epsilon" in first_u:  
+            for b in follow[nterm]:  
+                table[(nterm, b)] = right  
+    to_file(terminals, nonterminals, table, axiom, filename)  
+  
+  
+def to_file(terminals, nonterminals, table, axiom, filename):  
+    with open(filename, 'w') as f:  
+        f.write(f'terminals = {repr(terminals)}\n')  
+        f.write(f'nonterminals = {repr(nonterminals)}\n')  
+        f.write(f'table = {repr(table)}\n')  
+        f.write(f'axiom = {repr(axiom)}\n')
+```
+
+Predicter
+
+```python
+class TreeNode:  
+    num = 0  
+  
+  def __init__(self, content):  
+        TreeNode.num += 1  
+  self.num = TreeNode.num  
+        self.content = content  
+        self.children = []  
+  
+    def replace_name(self, name):  
+        for child in self.children:  
+            if child.content in ['non_Terms', 'terms', 'axiom', 'EPSILON', 'SYMBOL', 
+'SEMICOLON', 'LETTER', 'END', 'COMMA', 'EQV', 'OR']:  
+                child.content = name  
+                break  
+  
+ def add_child(self, child):  
+        self.children.append(child)  
+  
+    def __repr__(self):  
+        return str(self.content)  
+  
+    def print_graph(self, f):  
+        f.write(f'{self.num} [label = "{str(self.content)}"]\n')  
+        for child in self.children:  
+            f.write(f'{self.num} -> {child.num}\n')  
+        for child in self.children:  
+            child.print_graph(f)  
+  
+  
+class Predicter:  
+    def __init__(self, token_iterator, terminals, nonterminals, table, axiom):  
+        self.magazine = []  
+        self.terminals = terminals  
+        self.nonterminals = nonterminals  
+        self.tokens = token_iterator  
+        self.table = table  
+        self.axiom = axiom  
+        self.end = 'END'  
+  
+  def top_down_parse(self):  
+        self.magazine.append(TreeNode(self.end))  
+        root = TreeNode(self.axiom)  
+        self.magazine.append(root)  
+        a = next(self.tokens)  
+  
+        cur_x = None  
+ while True:  
+            x = self.magazine[-1]  
+            if x.content == self.end:  
+                break  
+ if x.content in self.terminals:  
+                if x.content == a.token_type:  
+                    if a.token_type in ['n', '\'*\'', '\'+\'', '\'(\'', '\')\'', 'non_Terms', 
+'terms', 'axiom', 'EPSILON', 'SYMBOL', 'SEMICOLON', 'LETTER', 'END', 'COMMA', 'EQV', 'OR']:  
+                        x.content = a.value  
+                    self.magazine.pop()  
+                    a = next(self.tokens)  
+                else:  
+                    raise ValueError(f"Проблема с токеном1 {a.token_type} {a.value}: 
+({a.line}, {a.position})")  
+            elif (x.content, a.token_type) in self.table:  
+                self.magazine.pop()  
+                new_nodes = []  
+                for i in range(len(self.table[(x.content, a.token_type)])):  
+                    new_nodes.append(TreeNode(self.table[(x.content, a.token_type)][i]))  
+                if len(new_nodes) == 0:  
+                    x.add_child(TreeNode("epsilon"))  
+                for y in new_nodes:  
+                    x.add_child(y)  
+                cur_x = x  
+                for y in new_nodes[::-1]:  
+                    if y.content != 'epsilon':  
+                        self.magazine.append(y)  
+            else:  
+                raise ValueError(f"Проблема с токеном2 {a.token_type} {a.value}: ({a.line}, {a.position})")  
+        return root
+```
+
+## Калькулятор
+
+`arith_lexer`
+
+```python
+import re  
+  
+  
+class Token:  
+    def __init__(self, token_type, value, line, position):  
+        self.token_type = token_type  
+        self.value = value  
+        self.line = line  
+        self.position = position  
+  
+    def __str__(self):  
+        return self.token_type + " " + self.value  
+  
+  
+class ArithLexer:  
+    def __init__(self, text):  
+        self.text = text  
+        self.line = 1  
+  self.position = 1  
+  self.tokens = []  
+        self.rules = [  
+            ('n', r'[1-9][0-9]*'),  
+            ('\'*\'', r'[*]'),  
+            ('\'+\'', r'[+]'),  
+            ('\'(\'', r'[(]'),  
+            ('\')\'', r'[)]'),  
+            ('END', r'\$'),  
+            ('SPACE', r'\s+')  
+        ]  
+  
+    def tokenize(self):  
+        lines = self.text.splitlines()  
+        for line_num, line in enumerate(lines):  
+            self.position = 1  
+  self.line = line_num + 1  
+  while self.position < len(line) + 1:  
+                for rule in self.rules:  
+                    match = re.match(rule[1], line[self.position - 1:])  
+                    if match:  
+                        if rule[0] != 'SPACE':  
+                            value = match.group()  
+                            self.tokens.append(Token(rule[0], value, self.line, self.position))  
+                        self.position += match.end()  
+                        break  
+ else:  
+                    for token in self.tokens:  
+                        print(token)  
+                    print(f'lexer error ({self.line}, {self.position})\n')  
+                    raise ValueError  
+  
+  return iter(self.tokens)  
+  
+  
+if __name__ == "__main__":  
+    with open('test1.txt', 'r') as f:  
+        text = f.read()  
+    lexer = ArithLexer(text + "$")  
+    try:  
+        for token in lexer.tokenize():  
+            print(token.token_type, token.value)  
+    except ValueError as v:  
+        pass
+```
+
+`calculator`
+
+```python
+import predicrer  
+import arith_table  
+import arith_lexer  
+  
+  
+class ENode:  
+    def __init__(self, T, E1):  
+        self.T = T  
+        self.E1 = E1  
+  
+    def eval(self):  
+        return self.T.eval() + self.E1.eval()  
+  
+  
+class TNode:  
+    def __init__(self, F, T1):  
+        self.F = F  
+        self.T1 = T1  
+  
+    def eval(self):  
+        return self.F.eval() * self.T1.eval()  
+  
+  
+class FNode:  
+    def __init__(self, content):  
+        self.content = content  
+  
+    def eval(self):  
+        if isinstance(self.content, ENode):  
+            return self.content.eval()  
+        else:  
+            return self.content  
+  
+  
+class E1Node:  
+    def __init__(self, T, E1):  
+        self.T = T  
+        self.E1 = E1  
+  
+    def eval(self):  
+        if self.T is None:  
+            return 0  
+  else:  
+            return self.T.eval() + self.E1.eval()  
+  
+  
+class T1Node:  
+    def __init__(self, F, T1):  
+        self.F = F  
+        self.T1 = T1  
+  
+    def eval(self):  
+        if self.F is None:  
+            return 1  
+  else:  
+            return self.T1.eval() * self.F.eval()  
+  
+  
+def expand_T(node):  
+    F = expand_F(node.children[0])  
+    T1 = expand_T1(node.children[1])  
+    return TNode(F, T1)  
+  
+  
+def expand_E1(node):  
+    if node.children[0].content == "epsilon":  
+        return E1Node(None, None)  
+    else:  
+        T = expand_T(node.children[1])  
+        E1 = expand_E1(node.children[2])  
+        return E1Node(T, E1)  
+  
+  
+def expand_T1(node):  
+    if node.children[0].content == "epsilon":  
+        return T1Node(None, None)  
+    else:  
+        F = expand_F(node.children[1])  
+        T1 = expand_T1(node.children[2])  
+        return T1Node(F, T1)  
+  
+  
+def expand_F(node):  
+    if len(node.children) == 1:  
+        return FNode(int(node.children[0].content))  
+    else:  
+        E = expand_E(node.children[1])  
+        return FNode(E)  
+  
+  
+def expand_E(root):  
+    T = expand_T(root.children[0])  
+    E1 = expand_E1(root.children[1])  
+    return ENode(T, E1)  
+  
+  
+if __name__ == "__main__":  
+    with open('calculator/input_arith.txt') as f:  
+        text = f.read()  
+    lexer = arith_lexer.ArithLexer(text + "$")  
+    try:  
+        iterator = lexer.tokenize()  
+        predicrer_arith = predicrer.Predicter(iterator, arith_table.terminals, 
+arith_table.nonterminals,  
+                                              arith_table.table, arith_table.axiom)  
+        root = predicrer_arith.top_down_parse()  
+  
+        with open('calculator/test.dot', 'w') as f:  
+            f.write('digraph {\n')  
+            root.print_graph(f)  
+            f.write('}')  
+  
+        E = expand_E(root)  
+        print(E.eval())  
+  
+    except ValueError as v:  
+        print(v)
+```
+
+# Тестирование
+
+## Генератор компиляторов
+
+Входные данные
+
+```
+non-terminal E, E1, T, T1, F;  
+terminal '+', '*', '(', ')', n;  
+E  ::= T E1;  
+E1 ::= '+' T E1 | epsilon;  
+T  ::= F T1;  
+T1 ::= '*' F T1 | epsilon;  
+F  ::= n | '(' E ')';  
+  
+axiom E;
+```
+
+```
+non-terminal G, N, T, N1, T1, S, E, A, R, R1;  
+terminal 'non_Terms', 'terms', 'axiom', 'EPSILON', 'SYMBOL', 'SEMICOLON', 'LETTER', 'COMMA', 'EQV', 'OR';
+G ::=  'non_Terms' N N1 'terms' T T1 R 'SEMICOLON' R1 A;  
+N1 ::= 'COMMA' N N1 | 'SEMICOLON';  
+T1 ::= 'COMMA' T T1 | 'SEMICOLON';  
+N ::= 'LETTER';  
+T ::= 'SYMBOL';  
+R1 ::= R 'SEMICOLON' R1 | epsilon;  
+R ::= N 'EQV' E S;  
+S ::= 'OR' E S | epsilon;  
+E ::= N E | T E | 'EPSILON' | epsilon;  
+A ::= 'axiom' N 'SEMICOLON';  
+  
+axiom G;
+```
+
+Вывод на `stdout`
+
+```
+axiom:  E
+terminals:  {"'*'", "')'", 'terminal', 'epsilon', 'non-terminal', ';', 'n', "'+'", "'('"}
+nonterminals:  {'T1', 'T', 'E1', 'E', 'F'}
+rules: 
+('E', ['T', 'E1'])
+('E1', ["'+'", 'T', 'E1'])
+('E1', ['epsilon'])
+('T', ['F', 'T1'])
+('T1', ["'*'", 'F', 'T1'])
+('T1', ['epsilon'])
+('F', ['n'])
+('F', ["'('", 'E', "')'"])
+```
+
+```
+axiom:  G
+terminals:  {"'non_Terms'", "'EQV'", "'SEMICOLON'", 'terminal', 'non-terminal', ';', 
+'epsilon', "'COMMA'", "'OR'", "'EPSILON'", "'LETTER'", "'terms'", "'axiom'", "'SYMBOL'"}
+nonterminals:  {'T1', 'G', 'T', 'S', 'R', 'A', 'E', 'N', 'R1', 'N1'}
+rules: 
+('G', ["'non_Terms'", 'N', 'N1', "'terms'", 'T', 'T1', 'R', "'SEMICOLON'", 'R1', 'A'])
+('N1', ["'COMMA'", 'N', 'N1'])
+('N1', ["'SEMICOLON'"])
+('T1', ["'COMMA'", 'T', 'T1'])
+('T1', ["'SEMICOLON'"])
+('N', ["'LETTER'"])
+('T', ["'SYMBOL'"])
+('R1', ['R', "'SEMICOLON'", 'R1'])
+('R1', ['epsilon'])
+('R', ['N', "'EQV'", 'E', 'S'])
+('S', ["'OR'", 'E', 'S'])
+('S', ['epsilon'])
+('E', ['N', 'E'])
+('E', ['T', 'E'])
+('E', ["'EPSILON'"])
+('E', ['epsilon'])
+('A', ["'axiom'", 'N', "'SEMICOLON'"])
+```
+
+## Калькулятор
+
+Входные данные
+
+```
+1 + 2 * 2 * (3 + 4) + 100500 * 3
+```
+
+Вывод на `stdout`
+
+```
+301529
+```
+
+# Вывод
+В ходе лабораторной работы был выполнен алгоритм построения таблиц предсказывающего разбора, 
+так же была сделана программа калькулятор, использующая таблицу предсказывающего разбора. 
+Лабораторная работа была интересная, и она дает интересный опыт работы с грамматиками, особенно 
+в вопросах обозначения epsilon символов (очень трудно отличить epsilon от EPSILON от ε).
