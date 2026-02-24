@@ -1,5 +1,0 @@
-{sfsdf} <- kjsdkf, sdkjfsd, kjdsfk, ({sdf} <- jksdjf, fskdjf), fsdkfj 
-
-
-
-NArrayCall -> '(' NCallExpression ')' NPrim | '{' VARNAME '}' NPrim .

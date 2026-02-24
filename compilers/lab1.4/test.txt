@@ -1,3 +1,0 @@
-real:=1234>=hello::!@
->= p123
-reality
