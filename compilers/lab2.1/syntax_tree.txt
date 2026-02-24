@@ -1,0 +1,241 @@
+0  *ast.File {
+1  .  Doc: nil
+2  .  Package: example.go:1:1
+3  .  Name: *ast.Ident {
+4  .  .  NamePos: example.go:1:9
+5  .  .  Name: "main"
+6  .  .  Obj: nil
+7  .  }
+8  .  Decls: []ast.Decl (len = 4) {
+9  .  .  0: *ast.GenDecl {
+10  .  .  .  Doc: nil
+11  .  .  .  TokPos: example.go:3:1
+12  .  .  .  Tok: import
+13  .  .  .  Lparen: -
+14  .  .  .  Specs: []ast.Spec (len = 1) {
+15  .  .  .  .  0: *ast.ImportSpec {
+16  .  .  .  .  .  Doc: nil
+17  .  .  .  .  .  Name: nil
+18  .  .  .  .  .  Path: *ast.BasicLit {
+19  .  .  .  .  .  .  ValuePos: example.go:3:8
+20  .  .  .  .  .  .  Kind: STRING
+21  .  .  .  .  .  .  Value: "\"fmt\""
+22  .  .  .  .  .  }
+23  .  .  .  .  .  Comment: nil
+24  .  .  .  .  .  EndPos: -
+25  .  .  .  .  }
+26  .  .  .  }
+27  .  .  .  Rparen: -
+28  .  .  }
+29  .  .  1: *ast.FuncDecl {
+30  .  .  .  Doc: nil
+31  .  .  .  Recv: nil
+32  .  .  .  Name: *ast.Ident {
+33  .  .  .  .  NamePos: example.go:5:6
+34  .  .  .  .  Name: "function1"
+35  .  .  .  .  Obj: *ast.Object {
+36  .  .  .  .  .  Kind: func
+37  .  .  .  .  .  Name: "function1"
+38  .  .  .  .  .  Decl: *(obj @ 29)
+39  .  .  .  .  .  Data: nil
+40  .  .  .  .  .  Type: nil
+41  .  .  .  .  }
+42  .  .  .  }
+43  .  .  .  Type: *ast.FuncType {
+44  .  .  .  .  Func: example.go:5:1
+45  .  .  .  .  Params: *ast.FieldList {
+46  .  .  .  .  .  Opening: example.go:5:15
+47  .  .  .  .  .  List: nil
+48  .  .  .  .  .  Closing: example.go:5:16
+49  .  .  .  .  }
+50  .  .  .  .  Results: nil
+51  .  .  .  }
+52  .  .  .  Body: *ast.BlockStmt {
+53  .  .  .  .  Lbrace: example.go:5:18
+54  .  .  .  .  List: []ast.Stmt (len = 1) {
+55  .  .  .  .  .  0: *ast.ExprStmt {
+56  .  .  .  .  .  .  X: *ast.CallExpr {
+57  .  .  .  .  .  .  .  Fun: *ast.SelectorExpr {
+58  .  .  .  .  .  .  .  .  X: *ast.Ident {
+59  .  .  .  .  .  .  .  .  .  NamePos: example.go:6:2
+60  .  .  .  .  .  .  .  .  .  Name: "fmt"
+61  .  .  .  .  .  .  .  .  .  Obj: nil
+62  .  .  .  .  .  .  .  .  }
+63  .  .  .  .  .  .  .  .  Sel: *ast.Ident {
+64  .  .  .  .  .  .  .  .  .  NamePos: example.go:6:6
+65  .  .  .  .  .  .  .  .  .  Name: "Println"
+66  .  .  .  .  .  .  .  .  .  Obj: nil
+67  .  .  .  .  .  .  .  .  }
+68  .  .  .  .  .  .  .  }
+69  .  .  .  .  .  .  .  Lparen: example.go:6:13
+70  .  .  .  .  .  .  .  Args: []ast.Expr (len = 1) {
+71  .  .  .  .  .  .  .  .  0: *ast.BasicLit {
+72  .  .  .  .  .  .  .  .  .  ValuePos: example.go:6:14
+73  .  .  .  .  .  .  .  .  .  Kind: STRING
+74  .  .  .  .  .  .  .  .  .  Value: "\"I'm function #1\""
+75  .  .  .  .  .  .  .  .  }
+76  .  .  .  .  .  .  .  }
+77  .  .  .  .  .  .  .  Ellipsis: -
+78  .  .  .  .  .  .  .  Rparen: example.go:6:31
+79  .  .  .  .  .  .  }
+80  .  .  .  .  .  }
+81  .  .  .  .  }
+82  .  .  .  .  Rbrace: example.go:7:1
+83  .  .  .  }
+84  .  .  }
+85  .  .  2: *ast.FuncDecl {
+86  .  .  .  Doc: nil
+87  .  .  .  Recv: nil
+88  .  .  .  Name: *ast.Ident {
+89  .  .  .  .  NamePos: example.go:9:6
+90  .  .  .  .  Name: "function2"
+91  .  .  .  .  Obj: *ast.Object {
+92  .  .  .  .  .  Kind: func
+93  .  .  .  .  .  Name: "function2"
+94  .  .  .  .  .  Decl: *(obj @ 85)
+95  .  .  .  .  .  Data: nil
+96  .  .  .  .  .  Type: nil
+97  .  .  .  .  }
+98  .  .  .  }
+99  .  .  .  Type: *ast.FuncType {
+100  .  .  .  .  Func: example.go:9:1
+101  .  .  .  .  Params: *ast.FieldList {
+102  .  .  .  .  .  Opening: example.go:9:15
+103  .  .  .  .  .  List: nil
+104  .  .  .  .  .  Closing: example.go:9:16
+105  .  .  .  .  }
+106  .  .  .  .  Results: nil
+107  .  .  .  }
+108  .  .  .  Body: *ast.BlockStmt {
+109  .  .  .  .  Lbrace: example.go:9:18
+110  .  .  .  .  List: []ast.Stmt (len = 2) {
+111  .  .  .  .  .  0: *ast.ExprStmt {
+112  .  .  .  .  .  .  X: *ast.CallExpr {
+113  .  .  .  .  .  .  .  Fun: *ast.SelectorExpr {
+114  .  .  .  .  .  .  .  .  X: *ast.Ident {
+115  .  .  .  .  .  .  .  .  .  NamePos: example.go:10:2
+116  .  .  .  .  .  .  .  .  .  Name: "fmt"
+117  .  .  .  .  .  .  .  .  .  Obj: nil
+118  .  .  .  .  .  .  .  .  }
+119  .  .  .  .  .  .  .  .  Sel: *ast.Ident {
+120  .  .  .  .  .  .  .  .  .  NamePos: example.go:10:6
+121  .  .  .  .  .  .  .  .  .  Name: "Println"
+122  .  .  .  .  .  .  .  .  .  Obj: nil
+123  .  .  .  .  .  .  .  .  }
+124  .  .  .  .  .  .  .  }
+125  .  .  .  .  .  .  .  Lparen: example.go:10:13
+126  .  .  .  .  .  .  .  Args: []ast.Expr (len = 1) {
+127  .  .  .  .  .  .  .  .  0: *ast.BasicLit {
+128  .  .  .  .  .  .  .  .  .  ValuePos: example.go:10:14
+129  .  .  .  .  .  .  .  .  .  Kind: STRING
+130  .  .  .  .  .  .  .  .  .  Value: "\"I'm function #2\""
+131  .  .  .  .  .  .  .  .  }
+132  .  .  .  .  .  .  .  }
+133  .  .  .  .  .  .  .  Ellipsis: -
+134  .  .  .  .  .  .  .  Rparen: example.go:10:31
+135  .  .  .  .  .  .  }
+136  .  .  .  .  .  }
+137  .  .  .  .  .  1: *ast.ExprStmt {
+138  .  .  .  .  .  .  X: *ast.CallExpr {
+139  .  .  .  .  .  .  .  Fun: *ast.Ident {
+140  .  .  .  .  .  .  .  .  NamePos: example.go:11:2
+141  .  .  .  .  .  .  .  .  Name: "function1"
+142  .  .  .  .  .  .  .  .  Obj: *(obj @ 35)
+143  .  .  .  .  .  .  .  }
+144  .  .  .  .  .  .  .  Lparen: example.go:11:11
+145  .  .  .  .  .  .  .  Args: nil
+146  .  .  .  .  .  .  .  Ellipsis: -
+147  .  .  .  .  .  .  .  Rparen: example.go:11:12
+148  .  .  .  .  .  .  }
+149  .  .  .  .  .  }
+150  .  .  .  .  }
+151  .  .  .  .  Rbrace: example.go:12:1
+152  .  .  .  }
+153  .  .  }
+154  .  .  3: *ast.FuncDecl {
+155  .  .  .  Doc: nil
+156  .  .  .  Recv: nil
+157  .  .  .  Name: *ast.Ident {
+158  .  .  .  .  NamePos: example.go:14:6
+159  .  .  .  .  Name: "main"
+160  .  .  .  .  Obj: *ast.Object {
+161  .  .  .  .  .  Kind: func
+162  .  .  .  .  .  Name: "main"
+163  .  .  .  .  .  Decl: *(obj @ 154)
+164  .  .  .  .  .  Data: nil
+165  .  .  .  .  .  Type: nil
+166  .  .  .  .  }
+167  .  .  .  }
+168  .  .  .  Type: *ast.FuncType {
+169  .  .  .  .  Func: example.go:14:1
+170  .  .  .  .  Params: *ast.FieldList {
+171  .  .  .  .  .  Opening: example.go:14:10
+172  .  .  .  .  .  List: nil
+173  .  .  .  .  .  Closing: example.go:14:11
+174  .  .  .  .  }
+175  .  .  .  .  Results: nil
+176  .  .  .  }
+177  .  .  .  Body: *ast.BlockStmt {
+178  .  .  .  .  Lbrace: example.go:14:13
+179  .  .  .  .  List: []ast.Stmt (len = 3) {
+180  .  .  .  .  .  0: *ast.ExprStmt {
+181  .  .  .  .  .  .  X: *ast.CallExpr {
+182  .  .  .  .  .  .  .  Fun: *ast.Ident {
+183  .  .  .  .  .  .  .  .  NamePos: example.go:15:2
+184  .  .  .  .  .  .  .  .  Name: "function1"
+185  .  .  .  .  .  .  .  .  Obj: *(obj @ 35)
+186  .  .  .  .  .  .  .  }
+187  .  .  .  .  .  .  .  Lparen: example.go:15:11
+188  .  .  .  .  .  .  .  Args: nil
+189  .  .  .  .  .  .  .  Ellipsis: -
+190  .  .  .  .  .  .  .  Rparen: example.go:15:12
+191  .  .  .  .  .  .  }
+192  .  .  .  .  .  }
+193  .  .  .  .  .  1: *ast.ExprStmt {
+194  .  .  .  .  .  .  X: *ast.CallExpr {
+195  .  .  .  .  .  .  .  Fun: *ast.Ident {
+196  .  .  .  .  .  .  .  .  NamePos: example.go:16:2
+197  .  .  .  .  .  .  .  .  Name: "function2"
+198  .  .  .  .  .  .  .  .  Obj: *(obj @ 91)
+199  .  .  .  .  .  .  .  }
+200  .  .  .  .  .  .  .  Lparen: example.go:16:11
+201  .  .  .  .  .  .  .  Args: nil
+202  .  .  .  .  .  .  .  Ellipsis: -
+203  .  .  .  .  .  .  .  Rparen: example.go:16:12
+204  .  .  .  .  .  .  }
+205  .  .  .  .  .  }
+206  .  .  .  .  .  2: *ast.ExprStmt {
+207  .  .  .  .  .  .  X: *ast.CallExpr {
+208  .  .  .  .  .  .  .  Fun: *ast.Ident {
+209  .  .  .  .  .  .  .  .  NamePos: example.go:17:2
+210  .  .  .  .  .  .  .  .  Name: "function2"
+211  .  .  .  .  .  .  .  .  Obj: *(obj @ 91)
+212  .  .  .  .  .  .  .  }
+213  .  .  .  .  .  .  .  Lparen: example.go:17:11
+214  .  .  .  .  .  .  .  Args: nil
+215  .  .  .  .  .  .  .  Ellipsis: -
+216  .  .  .  .  .  .  .  Rparen: example.go:17:12
+217  .  .  .  .  .  .  }
+218  .  .  .  .  .  }
+219  .  .  .  .  }
+220  .  .  .  .  Rbrace: example.go:18:1
+221  .  .  .  }
+222  .  .  }
+223  .  }
+224  .  Scope: *ast.Scope {
+225  .  .  Outer: nil
+226  .  .  Objects: map[string]*ast.Object (len = 3) {
+227  .  .  .  "function1": *(obj @ 35)
+228  .  .  .  "function2": *(obj @ 91)
+229  .  .  .  "main": *(obj @ 160)
+230  .  .  }
+231  .  }
+232  .  Imports: []*ast.ImportSpec (len = 1) {
+233  .  .  0: *(obj @ 15)
+234  .  }
+235  .  Unresolved: []*ast.Ident (len = 2) {
+236  .  .  0: *(obj @ 58)
+237  .  .  1: *(obj @ 114)
+238  .  }
+239  .  Comments: nil
+240  }

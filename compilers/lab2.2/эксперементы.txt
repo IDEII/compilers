@@ -1,0 +1,158 @@
+# грамматика
+### NEW Grammar
+
+NProgram |= NFunction, lambda st: [st]
+NProgram |= NProgram, NFunction, lambda _, st: _ + [st]
+
+NFunction |= NFunctionHeader, '=', NFuncBody, lambda header, body: Function(header=header, body=body)
+NFunctionHeader |= NType, VARNAME, '<-', NFuncParamStatements,lambda t, name, param: FunctionHeaderFull(name=name, return_type=t, params=[param])
+NFunctionHeader |= 'void', VARNAME, lambda name: FunctionHeaderShort(name=name)
+
+NType |= NBasicType
+NType |= NType, '[]', ArrayType
+
+NBasicType |= KW_INT, lambda: BasicType.Integer
+NBasicType |= KW_CHAR, lambda: BasicType.Char
+NBasicType |= KW_BOOL, lambda: BasicType.Boolean
+
+NFuncBody |= NStatements, '.'
+
+NFuncParamStatements |= NFuncParams
+NFuncParams |= NFuncParams, ',', NFuncParam, lambda ps, p: ps + [p]
+NFuncParams |= NFuncParam, lambda p: [p]
+NFuncParam |= NType, FUNCNAME, lambda type, name: FunctionParameter(param_type=type, param_name=name)
+
+# Statements
+NStatements |= NStatements, ';', NStatement, lambda stmts, st: stmts + [st]
+NStatements |= NStatement, lambda st: [st]
+NStatement |= NDeclarationStatement
+NStatement |= NAssignmentStatement
+NStatement |= NArrayAssignmentStatement
+NStatement |= NFunctionCallStatement
+NStatement |= NIfStatement
+NStatement |= NIfElseStatement
+NStatement |= NLoopWhileStatement
+NStatement |= NLoopForStatement
+NStatement |= NReturnStatement
+NStatement |= NLoopPostStatement
+# end Statements
+
+
+NDeclarationStatement |= NVarDeclarations, lambda decls: DeclarationStatement(None, decls)
+# NDeclarationStatement |= NType, NVarDeclarations, ':=', Expr, lambda type, decls, type2, expr: DeclarationStatement(type, decls)
+NDeclarationStatement |= NType, NVarDeclarations, lambda type, decls: DeclarationStatement(type, decls)
+NVarDeclarations |= NVarDeclarations, ',', NVarDeclaration, lambda decls, dec: decls + [dec]
+NVarDeclarations |= NVarDeclaration, lambda dec: [dec]
+NVarDeclaration |= VARNAME, ':=', NExpr, lambda name, expr: VarDeclaration(name, expr)
+NVarDeclaration |= VARNAME, lambda name: VarDeclaration(name, None)
+
+
+NAssignmentStatement |= VARNAME, ':=', NExpr, lambda l, r: AssignmentStatement(l, r)
+NArrayAssignmentStatement |= NArrayCall, ':=', NExpr, lambda l, r: AssignmentStatement(l, r)
+
+# NFunctionCallStatement |= '(', NFunctionCallStatement, ']'
+# NFunctionCallStatement |= '(', NFunctionCallStatement, ')'
+NFunctionCallStatement |= VARNAME, '<-', NArgs, FunctionCallStatement
+NArgs |= NArgs, ',', NExpr, lambda args, arg: args + [arg]
+NArgs |= NExpr, lambda arg: [arg]
+
+# NArrayCall |= VARNAME, NSpec, ArrayCall
+NArrayFuncCall |= '(', NFunctionCallStatement2, ')', '(', NExpr, ')', ArrayCall
+# NArrayCall |= NSpec, NSpec, ArrayCall
+
+NFunctionCallStatement2 |= VARNAME, '<-', NArgs, FunctionCallStatement
+NArgs |= NArgs, ',', NExpr, lambda args, arg: args + [arg]
+NArgs |= NExpr, lambda arg: [arg]
+
+NArrayCall |= VARNAME, NSpec, ArrayCall
+NArrayCall |= NArrayFuncCall
+# NArrayCall |= NSpec, NSpec, ArrayCall
+# NArrayCall |= '(', NSpec, ')', '(', NExpr, ')', ArrayCall
+
+NSpec |= NFunctionCallStatement
+NSpec |= NType, VARNAME, ArrayAllocation
+NSpec |= NType, INTEGER, ArrayAllocation
+NSpec |= VARNAME, lambda name: VarDeclaration(name, None)
+NSpec |= NArrayCall
+NSpec |= NConst
+NSpec |= '(', NSpec, ')'
+NSpec |= '(', NExpr, ')'
+
+# NSpec |= NExpr
+
+NConst |= INTEGER #, lambda: Const(value=None)
+NConst |= CHAR #, lambda: Const(value=None)
+NConst |= REF_CONST #, Const
+NConst |= STRING #, lambda: Const(value=None)
+NConst |= KW_TRUE #, lambda: Const(value=None)
+NConst |= KW_FALSE #, lambda: Const(value=None)
+
+NExpr |= NSpec
+NExpr |= NLogical
+# NExpr |= NExpr, KW_OR, NLogicalExpression, BinOperatorExpression
+# NExpr |= NExpr, KW_XOR, NLogicalExpression, BinOperatorExpression
+NExpr |= NCompare
+# NExpr |= NExpr, NAdditiveOperator, NArithmeticExpression, BinOperatorExpression
+# NExpr |= NExpr, NMultiplicativeOperator, NMultiplicativeExpression, BinOperatorExpression
+NExpr |= NMath
+NLogical |= NLogical, KW_OR, NLogical
+NLogical |= NLogical, KW_XOR, NLogical
+NLogical |= NLogical, KW_AND, NLogical
+NLogical |= '(',NLogical, ')'
+NLogical |= NSpec
+# NExpr |= NExpr, NCompareOperator, NCompareExpression, BinOperatorExpression
+NCompare |= NMath, NCompareOperator, NMath
+
+NMath |= NT, NAdditiveOperator, NMath
+NMath |= NT
+NT |= NF, NMultiplicativeOperator, NT
+NT |= NF
+NF |= NSpec
+NF |= '(', NMath, ')'
+
+NLogicalExpression |= NCompareExpression
+NLogicalExpression |= NLogicalExpression, KW_AND, NCompareExpression, BinOperatorExpression
+
+for op in ('==', '!=', '<', '>', '<=', '>='):
+    NCompareOperator |= op, make_op_lambda(op)
+
+NCompareExpression |= NArithmeticExpression
+NCompareExpression |= NCompareExpression, NCompareOperator, NArithmeticExpression, BinOperatorExpression
+
+NAdditiveOperator |= '+', lambda: '+'
+NAdditiveOperator |= '-', lambda: '-'
+
+NArithmeticExpression |= NMultiplicativeExpression
+NArithmeticExpression |= NMultiplicativeExpression, NAdditiveOperator, NMultiplicativeExpression, BinOperatorExpression
+# NArithmeticExpression |= NPowExpression
+# NArithmeticExpression |= NPowExpression, NAdditiveOperator, NPowExpression, BinOperatorExpression
+
+NMultiplicativeExpression |= NTerm
+NMultiplicativeExpression |= NMultiplicativeExpression, NMultiplicativeOperator, NTerm, BinOperatorExpression
+# NPowExpression |= NTerm
+# NPowExpression |= NTerm, '^', NPowExpression, lambda l, r: BinOperatorExpression(l, '^', r)
+
+NMultiplicativeOperator |= '*', lambda: '*'
+NMultiplicativeOperator |= '/', lambda: '/'
+NMultiplicativeOperator |= '%', lambda: '%'
+
+NTerm |= NFactor
+NTerm |= NFactor, '^', NTerm, lambda l, r: BinOperatorExpression(l, '^', r)
+
+NFactor |= KW_NOT, NSpec, lambda expr: UnaryOperatorExpression('!', expr)
+NFactor |= '-', NSpec, lambda expr: UnaryOperatorExpression('-', expr)
+NFactor |= NSpec
+
+NIfElseStatement |= NExpr, 'then', NStatements, NElseBlock, '.', lambda expr, stmts, stmts2: IfStatement(condition=expr, statements=stmts,
+                                                                                                                  elseblocks=stmts2)
+NIfStatement |= NExpr, 'then', NStatements, '.', lambda expr, stmts: IfStatement(condition=expr, statements=stmts, elseblocks=list())
+NElseBlock |= 'else', NStatements, lambda stmts: [ElseBlock(statements=stmts)]
+
+NLoopWhileStatement |= NExpr, 'loop', NStatements, '.', WhileStatement
+NLoopForStatement |= NCycle, NStatements, '.', ForStatement
+NLoopPostStatement |= 'loop', NStatements, 'while', NExpr, '.', lambda stmts, expr: PostLoopStatement(statements=stmts, condition=expr)
+
+NCycle |= NExpr, '~', NExpr, 'loop', VARNAME, lambda value1, value2, name: ForCycleHead(forfrom=value1, to=value2, step=None,
+                                                                                        var_declaration=CycleVar(name=name, value=value1, type=value1))
+#NCycleVar |= VARNAME, lambda name: CycleVar(name=name, value=None, type=None)
+NReturnStatement |= 'return', NExpr, lambda expr: ReturnStatement(return_value=expr)

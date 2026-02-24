@@ -1,0 +1,8 @@
+int[] {SumVectors} <- int[] A, int[] B =
+    int {size} := {Length} <- {A} , {B};
+    int[] {C} := int {size};
+    ( {Func} <- {a} , {b} , {c} ) ( {i} + 1 ) := {t};
+    0 ~ {size} - 1 loop {i}
+        {C} {i} := {A} {i} + {B} {i} . ;
+
+    return {C} .

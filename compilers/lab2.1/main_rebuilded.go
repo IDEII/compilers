@@ -1,0 +1,22 @@
+package main
+
+import "fmt"
+
+func function1() string {
+	s := "ugabuga"
+	return s
+}
+
+func funcs() int {
+	i := 0
+	fmt.Printf("Function Name: %s, Value: %d\n", "funcs", i)
+	return i
+}
+
+func main() {
+	s := function1()
+	t := funcs()
+	fmt.Println(t)
+
+	fmt.Println(s)
+}
